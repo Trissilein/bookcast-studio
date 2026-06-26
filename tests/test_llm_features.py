@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from bookcast.characters import suggest_characters
+from bookcast.llm import LlmProvider
+from bookcast.podcast import generate_podcast_script
+
+
+def test_suggest_characters_from_llm_json() -> None:
+    provider = _FakeProvider(
+        '{"characters":[{"name":"Ada","role":"character","evidence":"dialogue"},{"name":"Narrator","role":"narrator","evidence":"summary"}]}'
+    )
+
+    characters = suggest_characters("Ada said hello.", provider)
+
+    assert [character.name for character in characters] == ["Ada", "Narrator"]
+    assert characters[0].role == "character"
+
+
+def test_generate_podcast_script_from_llm_json() -> None:
+    provider = _FakeProvider(
+        '{"title":"Episode","summary":"Short summary","speakers":["host","explainer"],'
+        '"turns":[{"speaker":"host","text":"Welcome."},{"speaker":"explainer","text":"Here is the idea."}]}'
+    )
+
+    script = generate_podcast_script("Source text", provider, mode="educational")
+
+    assert script.title == "Episode"
+    assert script.mode == "educational"
+    assert script.speakers == ["host", "explainer"]
+    assert script.turns[1].text == "Here is the idea."
+
+
+class _FakeProvider(LlmProvider):
+    def __init__(self, response: str) -> None:
+        self.response = response
+
+    def health(self) -> bool:
+        return True
+
+    def generate(self, prompt: str, mode: str = "json") -> str:
+        assert mode == "json"
+        assert prompt
+        return self.response
+

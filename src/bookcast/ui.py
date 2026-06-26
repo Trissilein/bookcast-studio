@@ -50,13 +50,13 @@ def main(argv: list[str] | None = None) -> int:
             import_button.clicked.connect(self.import_file)
             calibre_button = QPushButton("Import from Calibre")
             calibre_button.clicked.connect(self.import_calibre)
-            pdf_button = QPushButton("PDF/DOCX in M2")
-            pdf_button.setEnabled(False)
+            render_button = QPushButton("Render Opus")
+            render_button.clicked.connect(self.render_selected)
 
             toolbar = QHBoxLayout()
             toolbar.addWidget(import_button)
             toolbar.addWidget(calibre_button)
-            toolbar.addWidget(pdf_button)
+            toolbar.addWidget(render_button)
             toolbar.addStretch(1)
 
             layout = QVBoxLayout()
@@ -138,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
                 ]
                 for col, value in enumerate(values):
                     item = QTableWidgetItem(str(value))
+                    if col == 0:
+                        item.setData(Qt.ItemDataRole.UserRole, book["id"])
                     if col in {3, 4}:
                         item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                     self.table.setItem(row, col, item)
@@ -150,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                 self,
                 "Import source",
                 str(Path.home()),
-                "Supported Sources (*.txt *.md *.epub)",
+                "Supported Sources (*.txt *.md *.epub *.pdf *.docx)",
             )
             if not file_name:
                 return
@@ -160,6 +162,24 @@ def main(argv: list[str] | None = None) -> int:
                 self.status.setText(f"Import failed: {exc}")
                 return
             self.refresh()
+
+        def render_selected(self) -> None:
+            row = self.table.currentRow()
+            if row < 0:
+                self.status.setText("Select a book to render.")
+                return
+            item = self.table.item(row, 0)
+            book_id = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if not book_id:
+                self.status.setText("Selected row has no book id.")
+                return
+            try:
+                output = self.library.render_book(str(book_id), output_format="opus")
+            except Exception as exc:
+                self.status.setText(f"Render failed: {exc}")
+                return
+            self.refresh()
+            self.status.setText(f"Rendered {output}")
 
         def closeEvent(self, event) -> None:  # noqa: N802 - Qt API name
             self.library.close()

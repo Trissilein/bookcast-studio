@@ -11,8 +11,7 @@ from xml.etree import ElementTree as ET
 from .models import Chapter, Document, Metadata
 from .text_pipeline import clean_text
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".epub"}
-UNSUPPORTED_EXTENSIONS = {".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".epub", ".pdf", ".docx"}
 
 
 def probe(path: Path) -> Metadata:
@@ -35,6 +34,10 @@ def extract(path: Path) -> Document:
         return _extract_text_file(path)
     if suffix == ".epub":
         return _extract_epub(path)
+    if suffix == ".docx":
+        return _extract_docx(path)
+    if suffix == ".pdf":
+        return _extract_pdf(path)
     raise ValueError(f"Unsupported source format: {suffix}")
 
 
@@ -55,8 +58,6 @@ def _ensure_supported(path: Path) -> None:
     if not path.exists():
         raise FileNotFoundError(path)
     suffix = path.suffix.lower()
-    if suffix in UNSUPPORTED_EXTENSIONS:
-        raise ValueError(f"{suffix} import is planned for M2, not available in this slice")
     if suffix not in SUPPORTED_EXTENSIONS:
         raise ValueError(f"Unsupported source format: {suffix}")
 
@@ -107,6 +108,53 @@ def _extract_epub(path: Path) -> Document:
     if not chapters:
         raise ValueError(f"No readable chapters found in EPUB: {path}")
     return Document(source_path=path, metadata=metadata, chapters=chapters, raw_text="\n\n".join(texts))
+
+
+def _extract_docx(path: Path) -> Document:
+    metadata = probe(path)
+    with zipfile.ZipFile(path) as zf:
+        try:
+            document_xml = zf.read("word/document.xml")
+        except KeyError as exc:
+            raise ValueError(f"DOCX has no word/document.xml: {path}") from exc
+    root = ET.fromstring(document_xml)
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    paragraphs: list[str] = []
+    for paragraph in root.findall(".//w:p", ns):
+        texts = [node.text or "" for node in paragraph.findall(".//w:t", ns)]
+        line = clean_text("".join(texts))
+        if line:
+            paragraphs.append(line)
+    text = clean_text("\n\n".join(paragraphs))
+    if not text:
+        raise ValueError(f"No readable text found in DOCX: {path}")
+    return Document(
+        source_path=path,
+        metadata=metadata,
+        chapters=[Chapter(index=0, title=metadata.title, text=text)],
+        raw_text=text,
+    )
+
+
+def _extract_pdf(path: Path) -> Document:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError("PDF import requires pypdf. Install with: python -m pip install -e .[dev]") from exc
+
+    metadata = probe(path)
+    reader = PdfReader(str(path))
+    pages: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text = clean_text(text)
+        if text:
+            pages.append(text)
+    raw_text = clean_text("\n\n".join(pages))
+    if not raw_text:
+        raise ValueError(f"No readable text found in PDF: {path}")
+    chapters = [Chapter(index=i, title=f"Page {i + 1}", text=text) for i, text in enumerate(pages)]
+    return Document(source_path=path, metadata=metadata, chapters=chapters, raw_text=raw_text)
 
 
 def _find_opf_path(zf: zipfile.ZipFile) -> str:
@@ -174,4 +222,3 @@ class _TextHTMLParser(HTMLParser):
 
     def text(self) -> str:
         return clean_text(" ".join(self._parts))
-

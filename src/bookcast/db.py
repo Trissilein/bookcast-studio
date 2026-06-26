@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class Database:
@@ -26,6 +26,8 @@ class Database:
             self._migrate_v1()
         if version < 2:
             self._migrate_v2()
+        if version < 3:
+            self._migrate_v3()
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.conn.commit()
 
@@ -73,6 +75,9 @@ class Database:
                 text TEXT NOT NULL,
                 text_hash TEXT NOT NULL,
                 status TEXT NOT NULL,
+                audio_path TEXT,
+                audio_format TEXT,
+                rendered_at TEXT,
                 UNIQUE(book_id, chapter_index, chunk_index)
             );
 
@@ -135,3 +140,17 @@ class Database:
         for name, declaration in additions.items():
             if name not in columns:
                 self.conn.execute(f"ALTER TABLE sources ADD COLUMN {name} {declaration}")
+
+    def _migrate_v3(self) -> None:
+        columns = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(chunks)").fetchall()
+        }
+        additions = {
+            "audio_path": "TEXT",
+            "audio_format": "TEXT",
+            "rendered_at": "TEXT",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {declaration}")

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .assembler import assemble_audio
 from .calibre import CalibreBook, CalibreClient, SUPPORTED_IMPORT_FORMATS
 from .db import Database
 from .importers import extract
 from .models import Document, Metadata
 from .text_pipeline import chunk_chapters
+from .tts import TtsProvider, WindowsSapiProvider
 
 
 class BookLibrary:
@@ -201,6 +204,120 @@ class BookLibrary:
     def get_book(self, book_id: str) -> dict[str, object] | None:
         row = self.db.conn.execute("SELECT * FROM books WHERE id = ?", (book_id,)).fetchone()
         return dict(row) if row else None
+
+    def get_chunks(self, book_id: str) -> list[dict[str, object]]:
+        rows = self.db.conn.execute(
+            """
+            SELECT * FROM chunks
+            WHERE book_id = ?
+            ORDER BY chapter_index, chunk_index
+            """,
+            (book_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_book_text(self, book_id: str) -> str:
+        rows = self.db.conn.execute(
+            """
+            SELECT title, text FROM chapters
+            WHERE book_id = ?
+            ORDER BY chapter_index
+            """,
+            (book_id,),
+        ).fetchall()
+        if not rows:
+            raise ValueError(f"Book has no chapters: {book_id}")
+        return "\n\n".join(f"# {row['title']}\n\n{row['text']}" for row in rows)
+
+    def save_podcast_script(self, book_id: str, script: dict[str, object]) -> Path:
+        book = self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        now = _now()
+        project_id = uuid.uuid4().hex
+        out_dir = self.root / "books" / book_id / "podcasts"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{safe_name(str(script.get('title') or 'podcast'))}.json"
+        out_path.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                INSERT INTO podcast_projects(id, source_book_id, title, mode, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    project_id,
+                    book_id,
+                    str(script.get("title") or "Untitled Podcast"),
+                    str(script.get("mode") or "educational"),
+                    "Scripted",
+                    now,
+                    now,
+                ),
+            )
+        return out_path
+
+    def render_book(
+        self,
+        book_id: str,
+        *,
+        output_format: str = "opus",
+        provider: TtsProvider | None = None,
+        voice: str | None = None,
+        rate: int = 0,
+        ffmpeg: str = "ffmpeg",
+        limit: int | None = None,
+    ) -> Path:
+        book = self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        provider = provider or WindowsSapiProvider()
+        if not provider.health():
+            raise RuntimeError(f"TTS provider not available: {provider.id}")
+
+        chunks = self.get_chunks(book_id)
+        if limit is not None:
+            chunks = chunks[:limit]
+        if not chunks:
+            raise ValueError(f"Book has no chunks: {book_id}")
+
+        chunk_dir = self.root / "books" / book_id / "audio_chunks"
+        rendered: list[Path] = []
+        for chunk in chunks:
+            out_wav = chunk_dir / f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_{chunk['text_hash'][:12]}.wav"
+            if not out_wav.exists() or out_wav.stat().st_size == 0:
+                provider.synthesize(str(chunk["text"]), out_wav, voice=voice, rate=rate)
+                self._mark_chunk_rendered(str(chunk["id"]), out_wav)
+            rendered.append(out_wav)
+
+        output_dir = self.root / "books" / book_id / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = f"{safe_name(str(book['author']))} - {safe_name(str(book['title']))}.{output_format.lower()}"
+        output_path = output_dir / output_name
+        assemble_audio(rendered, output_path, output_format, ffmpeg=ffmpeg)
+        self._add_output(book_id, output_format, output_path)
+        return output_path
+
+    def _mark_chunk_rendered(self, chunk_id: str, audio_path: Path) -> None:
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                UPDATE chunks
+                SET status = 'Rendered', audio_path = ?, audio_format = 'wav', rendered_at = ?
+                WHERE id = ?
+                """,
+                (str(audio_path), _now(), chunk_id),
+            )
+
+    def _add_output(self, book_id: str, output_format: str, output_path: Path) -> None:
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                INSERT INTO outputs(id, book_id, format, path, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (uuid.uuid4().hex, book_id, output_format.lower(), str(output_path), _now()),
+            )
 
 
 def _now() -> str:

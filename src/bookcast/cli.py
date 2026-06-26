@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .calibre import CalibreClient, find_calibredb
+from .characters import suggest_characters
 from .library import BookLibrary
+from .llm import OllamaProvider
+from .podcast import PODCAST_MODES, generate_podcast_script
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +21,32 @@ def main(argv: list[str] | None = None) -> int:
 
     list_parser = sub.add_parser("list", help="List imported books")
     list_parser.add_argument("--library", type=Path, required=True)
+
+    render_parser = sub.add_parser("render", help="Render a book to audio")
+    render_parser.add_argument("book_id")
+    render_parser.add_argument("--library", type=Path, required=True)
+    render_parser.add_argument("--format", choices=["opus", "mp3", "wav"], default="opus")
+    render_parser.add_argument("--voice", default=None)
+    render_parser.add_argument("--rate", type=int, default=0)
+    render_parser.add_argument("--limit", type=int, default=None, help="Render only the first N chunks")
+    render_parser.add_argument("--ffmpeg", default="ffmpeg")
+
+    characters_parser = sub.add_parser("characters", help="LLM-assisted character tools")
+    characters_sub = characters_parser.add_subparsers(dest="characters_command", required=True)
+    characters_suggest = characters_sub.add_parser("suggest", help="Suggest speakers/characters for a book")
+    characters_suggest.add_argument("book_id")
+    characters_suggest.add_argument("--library", type=Path, required=True)
+    characters_suggest.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    characters_suggest.add_argument("--model", default="qwen3:8b")
+
+    podcast_parser = sub.add_parser("podcast", help="Static podcast generation")
+    podcast_sub = podcast_parser.add_subparsers(dest="podcast_command", required=True)
+    podcast_script = podcast_sub.add_parser("script", help="Generate a static podcast script from a book")
+    podcast_script.add_argument("book_id")
+    podcast_script.add_argument("--library", type=Path, required=True)
+    podcast_script.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
+    podcast_script.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    podcast_script.add_argument("--model", default="qwen3:8b")
 
     calibre_parser = sub.add_parser("calibre", help="Import from a Calibre library")
     calibre_sub = calibre_parser.add_subparsers(dest="calibre_command", required=True)
@@ -85,6 +115,49 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 library.close()
             return 0
+
+    if args.command == "render":
+        library = BookLibrary(args.library)
+        try:
+            output = library.render_book(
+                args.book_id,
+                output_format=args.format,
+                voice=args.voice,
+                rate=args.rate,
+                limit=args.limit,
+                ffmpeg=args.ffmpeg,
+            )
+        finally:
+            library.close()
+        print(f"Rendered {output}")
+        return 0
+
+    if args.command == "characters":
+        library = BookLibrary(args.library)
+        try:
+            text = library.get_book_text(args.book_id)
+        finally:
+            library.close()
+        provider = OllamaProvider(model=args.model, base_url=args.ollama_url)
+        if not provider.health():
+            raise SystemExit(f"Ollama is not reachable at {args.ollama_url}")
+        candidates = suggest_characters(text, provider)
+        print(json.dumps([candidate.__dict__ for candidate in candidates], ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "podcast":
+        library = BookLibrary(args.library)
+        try:
+            text = library.get_book_text(args.book_id)
+            provider = OllamaProvider(model=args.model, base_url=args.ollama_url)
+            if not provider.health():
+                raise SystemExit(f"Ollama is not reachable at {args.ollama_url}")
+            script = generate_podcast_script(text, provider, mode=args.mode)
+            output = library.save_podcast_script(args.book_id, script.to_dict())
+        finally:
+            library.close()
+        print(f"Wrote podcast script {output}")
+        return 0
 
     parser.error("unknown command")
     return 2

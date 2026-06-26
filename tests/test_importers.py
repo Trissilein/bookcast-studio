@@ -3,8 +3,6 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-import pytest
-
 from bookcast.importers import extract, probe, title_author_from_filename
 
 
@@ -27,12 +25,27 @@ def test_txt_extract(tmp_path: Path) -> None:
     assert document.chapters[0].text == "Hello\n\nWorld"
 
 
-def test_docx_is_blocked_until_m2(tmp_path: Path) -> None:
-    source = tmp_path / "book.docx"
-    source.write_bytes(b"placeholder")
+def test_docx_extract(tmp_path: Path) -> None:
+    source = tmp_path / "Ada Author - Doc Book.docx"
+    _write_docx(source, ["First paragraph.", "Second paragraph."])
 
-    with pytest.raises(ValueError, match="planned for M2"):
-        probe(source)
+    document = extract(source)
+
+    assert document.metadata.title == "Doc Book"
+    assert document.metadata.author == "Ada Author"
+    assert "First paragraph." in document.raw_text
+    assert "Second paragraph." in document.raw_text
+
+
+def test_pdf_extract(tmp_path: Path) -> None:
+    source = tmp_path / "Ada Author - Pdf Book.pdf"
+    _write_pdf(source, "Hello PDF")
+
+    document = extract(source)
+
+    assert document.metadata.title == "Pdf Book"
+    assert document.metadata.author == "Ada Author"
+    assert "Hello PDF" in document.raw_text
 
 
 def test_epub_extracts_metadata_and_chapters(tmp_path: Path) -> None:
@@ -85,3 +98,42 @@ def _write_epub(path: Path) -> None:
         zf.writestr("OEBPS/chapter1.xhtml", "<html><body><h1>Start</h1><p>First chapter text.</p></body></html>")
         zf.writestr("OEBPS/chapter2.xhtml", "<html><body><h1>Next</h1><p>Second chapter text.</p></body></html>")
 
+
+def _write_docx(path: Path, paragraphs: list[str]) -> None:
+    body = "".join(
+        f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>"
+        for text in paragraphs
+    )
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f"<w:body>{body}</w:body>"
+        "</w:document>"
+    )
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("[Content_Types].xml", "")
+        zf.writestr("word/document.xml", document_xml)
+
+
+def _write_pdf(path: Path, text: str) -> None:
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(f'BT /F1 24 Tf 72 720 Td ({escaped}) Tj ET'.encode('ascii'))} >>\nstream\nBT /F1 24 Tf 72 720 Td ({escaped}) Tj ET\nendstream".encode("ascii"),
+    ]
+    parts = [b"%PDF-1.4\n"]
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(sum(len(part) for part in parts))
+        parts.append(f"{index} 0 obj\n".encode("ascii") + obj + b"\nendobj\n")
+    xref_offset = sum(len(part) for part in parts)
+    parts.append(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets[1:]:
+        parts.append(f"{offset:010d} 00000 n \n".encode("ascii"))
+    parts.append(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    path.write_bytes(b"".join(parts))

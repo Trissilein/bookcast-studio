@@ -22,25 +22,26 @@
 
 ## M2 Text Pipeline
 
-- Add PDF and DOCX extraction.
+- Add PDF and DOCX extraction. Done.
 - Add editable cleanup profiles.
 - Add chapter and chunk review UI.
 
 ## M3 Audiobook Render
 
-- Add TTS provider interface implementation.
-- Render resumable chunks.
-- Assemble Opus, MP3, M4B with ffmpeg.
+- Add TTS provider interface implementation. Windows SAPI baseline done.
+- Render resumable chunks. Done.
+- Assemble Opus, MP3, WAV with ffmpeg. Done.
+- Add M4B chaptered export.
 
 ## M4 Voices + Characters
 
 - Add narrator and speaker tables in UI.
-- Add Ollama-assisted character extraction.
+- Add Ollama-assisted character extraction. CLI foundation done.
 - Require manual confirmation before rendering character voices.
 
 ## M5 Static Podcast Generator
 
-- Generate educational, controversial, and interview scripts from sources.
+- Generate educational, controversial, and interview scripts from sources. CLI foundation done.
 - Render multi-speaker episodes.
 
 ## M6 Interactive Podcast
