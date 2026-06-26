@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class Database:
@@ -24,6 +24,8 @@ class Database:
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if version < 1:
             self._migrate_v1()
+        if version < 2:
+            self._migrate_v2()
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.conn.commit()
 
@@ -47,6 +49,10 @@ class Database:
                 stored_path TEXT NOT NULL,
                 source_sha256 TEXT NOT NULL,
                 format TEXT NOT NULL,
+                source_kind TEXT NOT NULL DEFAULT 'file',
+                external_id TEXT,
+                external_library_path TEXT,
+                external_uuid TEXT,
                 created_at TEXT NOT NULL
             );
 
@@ -115,3 +121,17 @@ class Database:
             """
         )
 
+    def _migrate_v2(self) -> None:
+        columns = {
+            row["name"]
+            for row in self.conn.execute("PRAGMA table_info(sources)").fetchall()
+        }
+        additions = {
+            "source_kind": "TEXT NOT NULL DEFAULT 'file'",
+            "external_id": "TEXT",
+            "external_library_path": "TEXT",
+            "external_uuid": "TEXT",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                self.conn.execute(f"ALTER TABLE sources ADD COLUMN {name} {declaration}")

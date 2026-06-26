@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from .calibre import CalibreClient, find_calibredb
 from .library import BookLibrary
 
 
@@ -15,7 +16,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import (
+            QAbstractItemView,
             QApplication,
+            QDialog,
+            QDialogButtonBox,
             QFileDialog,
             QHBoxLayout,
             QLabel,
@@ -44,11 +48,14 @@ def main(argv: list[str] | None = None) -> int:
 
             import_button = QPushButton("Import TXT/MD/EPUB")
             import_button.clicked.connect(self.import_file)
+            calibre_button = QPushButton("Import from Calibre")
+            calibre_button.clicked.connect(self.import_calibre)
             pdf_button = QPushButton("PDF/DOCX in M2")
             pdf_button.setEnabled(False)
 
             toolbar = QHBoxLayout()
             toolbar.addWidget(import_button)
+            toolbar.addWidget(calibre_button)
             toolbar.addWidget(pdf_button)
             toolbar.addStretch(1)
 
@@ -61,6 +68,60 @@ def main(argv: list[str] | None = None) -> int:
             root.setLayout(layout)
             self.setCentralWidget(root)
             self.refresh()
+
+        def import_calibre(self) -> None:
+            folder = QFileDialog.getExistingDirectory(self, "Select Calibre Library", str(Path.home()))
+            if not folder:
+                return
+            try:
+                client = CalibreClient(Path(folder), calibredb=find_calibredb() or "calibredb")
+                books = [book for book in client.scan() if book.preferred_format()]
+            except Exception as exc:
+                self.status.setText(f"Calibre scan failed: {exc}")
+                return
+            if not books:
+                self.status.setText("No Calibre books with EPUB/TXT/MD found.")
+                return
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Import from Calibre")
+            dialog.resize(900, 520)
+            table = QTableWidget(len(books), 4)
+            table.setHorizontalHeaderLabels(["ID", "Author", "Title", "Formats"])
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+            for row, book in enumerate(books):
+                for col, value in enumerate([book.id, book.authors, book.title, ", ".join(book.formats)]):
+                    table.setItem(row, col, QTableWidgetItem(str(value)))
+            table.resizeColumnsToContents()
+
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel("Select Calibre books to import. Existing Calibre UUIDs are skipped."))
+            layout.addWidget(table)
+            layout.addWidget(buttons)
+            dialog.setLayout(layout)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            rows = sorted({index.row() for index in table.selectedIndexes()})
+            if not rows:
+                self.status.setText("No Calibre books selected.")
+                return
+            imported = 0
+            try:
+                for row in rows:
+                    self.library.import_calibre_book(client, books[row])
+                    imported += 1
+            except Exception as exc:
+                self.status.setText(f"Calibre import failed after {imported} books: {exc}")
+                self.refresh()
+                return
+            self.refresh()
+            self.status.setText(f"Imported {imported} Calibre books.")
 
         def refresh(self) -> None:
             self.table.setSortingEnabled(False)
@@ -108,4 +169,3 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow(args.library)
     window.show()
     return app.exec()
-

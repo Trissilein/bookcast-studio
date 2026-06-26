@@ -7,9 +7,10 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .calibre import CalibreBook, CalibreClient, SUPPORTED_IMPORT_FORMATS
 from .db import Database
 from .importers import extract
-from .models import Document
+from .models import Document, Metadata
 from .text_pipeline import chunk_chapters
 
 
@@ -23,6 +24,84 @@ class BookLibrary:
 
     def import_source(self, source_path: Path) -> str:
         document = extract(Path(source_path))
+        return self._store_document(document, Path(source_path), source_kind="file")
+
+    def import_calibre_book(
+        self,
+        client: CalibreClient,
+        book: CalibreBook,
+        format_preference: tuple[str, ...] = SUPPORTED_IMPORT_FORMATS,
+    ) -> str:
+        existing = self.find_calibre_book(client.library_path, book)
+        if existing:
+            return existing
+
+        fmt = book.preferred_format(format_preference)
+        if not fmt:
+            raise ValueError(f"Calibre book {book.id} has no supported format: {', '.join(book.formats)}")
+
+        exported = client.export_book(book, fmt)
+        try:
+            document = extract(exported)
+            document = Document(
+                source_path=document.source_path,
+                metadata=Metadata(
+                    title=book.title or document.metadata.title,
+                    author=book.authors or document.metadata.author,
+                    language=book.language or document.metadata.language,
+                ),
+                chapters=document.chapters,
+                raw_text=document.raw_text,
+            )
+            return self._store_document(
+                document,
+                exported,
+                source_kind="calibre",
+                external_id=book.id,
+                external_library_path=str(client.library_path),
+                external_uuid=book.uuid,
+            )
+        finally:
+            if exported.parent.name.startswith("bookcast-calibre-export-"):
+                shutil.rmtree(exported.parent, ignore_errors=True)
+
+    def find_calibre_book(self, library_path: Path, book: CalibreBook) -> str | None:
+        if book.uuid:
+            row = self.db.conn.execute(
+                """
+                SELECT book_id FROM sources
+                WHERE source_kind = 'calibre'
+                  AND external_library_path = ?
+                  AND external_uuid = ?
+                LIMIT 1
+                """,
+                (str(Path(library_path)), book.uuid),
+            ).fetchone()
+            if row:
+                return str(row["book_id"])
+
+        row = self.db.conn.execute(
+            """
+            SELECT book_id FROM sources
+            WHERE source_kind = 'calibre'
+              AND external_library_path = ?
+              AND external_id = ?
+            LIMIT 1
+            """,
+            (str(Path(library_path)), book.id),
+        ).fetchone()
+        return str(row["book_id"]) if row else None
+
+    def _store_document(
+        self,
+        document: Document,
+        source_path: Path,
+        *,
+        source_kind: str,
+        external_id: str | None = None,
+        external_library_path: str | None = None,
+        external_uuid: str | None = None,
+    ) -> str:
         book_id = uuid.uuid4().hex
         now = _now()
         book_dir = self.root / "books" / book_id
@@ -52,8 +131,11 @@ class BookLibrary:
             )
             conn.execute(
                 """
-                INSERT INTO sources(id, book_id, original_path, stored_path, source_sha256, format, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sources(
+                    id, book_id, original_path, stored_path, source_sha256, format,
+                    source_kind, external_id, external_library_path, external_uuid, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     uuid.uuid4().hex,
@@ -62,6 +144,10 @@ class BookLibrary:
                     str(stored_source),
                     source_hash,
                     Path(source_path).suffix.lower().lstrip("."),
+                    source_kind,
+                    external_id,
+                    external_library_path,
+                    external_uuid,
                     now,
                 ),
             )
@@ -88,7 +174,7 @@ class BookLibrary:
                         chunk.text_hash,
                         "Ready",
                     ),
-                )
+                    )
         return book_id
 
     def list_books(self) -> list[dict[str, object]]:
@@ -133,4 +219,3 @@ def safe_name(value: str) -> str:
     value = re.sub(r'[<>:"/\\|?*]+', "-", value)
     value = re.sub(r"\s+", " ", value).strip()
     return value[:120] or "Untitled"
-

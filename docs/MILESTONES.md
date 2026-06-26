@@ -13,6 +13,13 @@
 - Persist books, sources, chapters, chunks.
 - Show imported books in desktop library table.
 
+## M1.5 Calibre Import
+
+- Read Calibre libraries through `calibredb`.
+- Scan books with `EPUB`, `TXT`, or `MD` formats.
+- Import selected books into BookCast without writing back to Calibre.
+- Store Calibre ID/UUID for duplicate-safe re-import.
+
 ## M2 Text Pipeline
 
 - Add PDF and DOCX extraction.
@@ -41,4 +48,3 @@
 - Keep local LLM resident.
 - Support user interruptions and generated follow-up segments.
 - Stream partial render/playback.
-
