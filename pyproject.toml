@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookcast-studio"
+version = "0.1.0"
+description = "Local-first audiobook and podcast generation studio."
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+ui = ["PySide6>=6.7"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+bookcast = "bookcast.cli:main"
+bookcast-ui = "bookcast.ui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
