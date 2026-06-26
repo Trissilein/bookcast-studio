@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class Database:
@@ -28,6 +29,8 @@ class Database:
             self._migrate_v2()
         if version < 3:
             self._migrate_v3()
+        if version < 4:
+            self._migrate_v4()
         self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         self.conn.commit()
 
@@ -39,6 +42,7 @@ class Database:
                 title TEXT NOT NULL,
                 author TEXT NOT NULL,
                 language TEXT,
+                cleanup_profile TEXT NOT NULL DEFAULT 'standard',
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -123,6 +127,14 @@ class Database:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS cleanup_profiles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                config_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
 
@@ -154,3 +166,28 @@ class Database:
         for name, declaration in additions.items():
             if name not in columns:
                 self.conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {declaration}")
+
+    def _migrate_v4(self) -> None:
+        books_columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(books)").fetchall()}
+        if "cleanup_profile" not in books_columns:
+            self.conn.execute("ALTER TABLE books ADD COLUMN cleanup_profile TEXT NOT NULL DEFAULT 'standard'")
+
+        self.conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cleanup_profiles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                config_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO cleanup_profiles(id, name, config_json, created_at, updated_at)
+            VALUES ('standard', 'standard', ?, ?, ?)
+            """,
+            ('{"max_chars":1800,"join_hyphenated_lines":true,"collapse_blank_lines":true,"collapse_spaces":true,"remove_soft_hyphens":true,"strip_trailing_whitespace":true,"trim":true,"max_blank_lines":2}', now, now),
+        )

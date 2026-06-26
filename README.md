@@ -10,17 +10,17 @@ Current slice:
 - TXT, MD, EPUB, DOCX, and PDF import.
 - Read-only Calibre library import via `calibredb`.
 - Windows SAPI TTS chunk rendering.
-- ffmpeg assembly to Opus, MP3, or WAV.
-- Ollama-assisted character suggestions and static podcast scripts.
+- ffmpeg assembly to Opus, MP3, WAV, or M4B.
+- Ollama-assisted character suggestions, static podcast scripts, and podcast render.
+- Interactive podcast sessions with resident Ollama and live follow-ups.
 - Text cleanup and stable chunk hashes.
+- Editable cleanup profiles, chapter review, and speaker mapping in the UI.
 
 Planned later:
 
-- PDF and DOCX extraction.
-- Local TTS providers.
-- Audiobook rendering to Opus, MP3, and M4B.
-- Character voice assignment.
-- Paper/article to scripted podcast generation with Ollama.
+- Additional TTS providers beyond Windows SAPI.
+- Better UI polish and batch job management.
+- Optional cloud sync / collaboration layer.
 
 ## Setup
 
@@ -42,6 +42,7 @@ py -3 -m venv .venv
 .\.venv\Scripts\bookcast import .\samples\book.epub --library .\library
 .\.venv\Scripts\bookcast list --library .\library
 .\.venv\Scripts\bookcast render <book-id> --library .\library --format opus
+.\.venv\Scripts\bookcast render <book-id> --library .\library --format m4b
 ```
 
 ## Import From Calibre
@@ -64,6 +65,8 @@ These commands require a running Ollama server.
 ```powershell
 .\.venv\Scripts\bookcast characters suggest <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast podcast script <book-id> --library .\library --mode educational --model qwen3:8b
+.\.venv\Scripts\bookcast podcast render <book-id> --library .\library --mode controversial --format opus --voice host=Narrator --voice explainer=Guest
+.\.venv\Scripts\bookcast podcast interactive <book-id> --library .\library --mode interview --turns 4 --no-playback
 ```
 
 Podcast modes: `educational`, `controversial`, `interview`.

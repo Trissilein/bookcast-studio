@@ -100,3 +100,21 @@ $s.Dispose()
         if not output_wav.exists() or output_wav.stat().st_size == 0:
             raise RuntimeError(f"Windows SAPI produced no audio: {output_wav}")
 
+
+def play_wav(path: Path, powershell: str = "powershell") -> None:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    script = f"""
+$player = New-Object System.Media.SoundPlayer('{str(path).replace("'", "''")}')
+$player.PlaySync()
+"""
+    proc = subprocess.run(
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip()
+        raise RuntimeError(f"WAV playback failed: {detail}")

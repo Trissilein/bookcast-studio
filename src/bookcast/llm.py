@@ -21,6 +21,7 @@ class OllamaProvider(LlmProvider):
     model: str = "qwen3:8b"
     base_url: str = "http://127.0.0.1:11434"
     timeout_sec: int = 120
+    keep_alive: str | int = -1
 
     id = "ollama"
 
@@ -37,6 +38,7 @@ class OllamaProvider(LlmProvider):
             "prompt": prompt,
             "stream": False,
             "format": "json" if mode == "json" else "",
+            "keep_alive": self.keep_alive,
         }
         request = urllib.request.Request(
             f"{self.base_url}/api/generate",
@@ -62,4 +64,3 @@ def parse_json_object(text: str) -> dict:
     if start == -1 or end == -1 or end < start:
         raise ValueError("LLM response did not contain a JSON object")
     return json.loads(text[start : end + 1])
-

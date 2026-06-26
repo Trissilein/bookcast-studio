@@ -8,12 +8,13 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .assembler import assemble_audio
+from .assembler import assemble_audio, chapter_timeline, probe_duration
 from .calibre import CalibreBook, CalibreClient, SUPPORTED_IMPORT_FORMATS
 from .db import Database
 from .importers import extract
-from .models import Document, Metadata
-from .text_pipeline import chunk_chapters
+from .models import Chapter, Document, Metadata
+from .podcast import PodcastScript, PodcastTurn
+from .text_pipeline import chunk_chapters, clean_text
 from .tts import TtsProvider, WindowsSapiProvider
 
 
@@ -25,15 +26,16 @@ class BookLibrary:
     def close(self) -> None:
         self.db.close()
 
-    def import_source(self, source_path: Path) -> str:
+    def import_source(self, source_path: Path, cleanup_profile: str = "standard") -> str:
         document = extract(Path(source_path))
-        return self._store_document(document, Path(source_path), source_kind="file")
+        return self._store_document(document, Path(source_path), source_kind="file", cleanup_profile=cleanup_profile)
 
     def import_calibre_book(
         self,
         client: CalibreClient,
         book: CalibreBook,
         format_preference: tuple[str, ...] = SUPPORTED_IMPORT_FORMATS,
+        cleanup_profile: str = "standard",
     ) -> str:
         existing = self.find_calibre_book(client.library_path, book)
         if existing:
@@ -63,6 +65,7 @@ class BookLibrary:
                 external_id=book.id,
                 external_library_path=str(client.library_path),
                 external_uuid=book.uuid,
+                cleanup_profile=cleanup_profile,
             )
         finally:
             if exported.parent.name.startswith("bookcast-calibre-export-"):
@@ -104,6 +107,7 @@ class BookLibrary:
         external_id: str | None = None,
         external_library_path: str | None = None,
         external_uuid: str | None = None,
+        cleanup_profile: str = "standard",
     ) -> str:
         book_id = uuid.uuid4().hex
         now = _now()
@@ -113,20 +117,31 @@ class BookLibrary:
         stored_source = source_dir / Path(source_path).name
         shutil.copy2(source_path, stored_source)
         source_hash = _sha256(stored_source)
-        chunks = chunk_chapters(document.chapters)
+        profile = self.get_cleanup_profile(cleanup_profile)
+        profile_config = profile.get("config", {})
+        cleaned_chapters = [
+            Chapter(
+                index=chapter.index,
+                title=chapter.title,
+                text=clean_text(chapter.text, profile_config),
+            )
+            for chapter in document.chapters
+        ]
+        chunks = chunk_chapters(cleaned_chapters, profile=profile_config)
 
         conn = self.db.conn
         with conn:
             conn.execute(
                 """
-                INSERT INTO books(id, title, author, language, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO books(id, title, author, language, cleanup_profile, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     book_id,
                     document.metadata.title,
                     document.metadata.author,
                     document.metadata.language,
+                    cleanup_profile,
                     "Imported",
                     now,
                     now,
@@ -154,7 +169,7 @@ class BookLibrary:
                     now,
                 ),
             )
-            for chapter in document.chapters:
+            for chapter in cleaned_chapters:
                 conn.execute(
                     """
                     INSERT INTO chapters(id, book_id, chapter_index, title, text)
@@ -188,6 +203,7 @@ class BookLibrary:
                 b.title,
                 b.author,
                 b.language,
+                b.cleanup_profile,
                 b.status,
                 COUNT(DISTINCT c.id) AS chapter_count,
                 COUNT(DISTINCT k.id) AS chunk_count,
@@ -216,6 +232,96 @@ class BookLibrary:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_chapters(self, book_id: str) -> list[dict[str, object]]:
+        rows = self.db.conn.execute(
+            """
+            SELECT * FROM chapters
+            WHERE book_id = ?
+            ORDER BY chapter_index
+            """,
+            (book_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_cleanup_profiles(self) -> list[dict[str, object]]:
+        rows = self.db.conn.execute(
+            """
+            SELECT * FROM cleanup_profiles
+            ORDER BY name
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_cleanup_profile(self, name: str | None = None) -> dict[str, object]:
+        profile_name = (name or "standard").strip() or "standard"
+        row = self.db.conn.execute(
+            """
+            SELECT * FROM cleanup_profiles
+            WHERE name = ?
+            LIMIT 1
+            """,
+            (profile_name,),
+        ).fetchone()
+        if row:
+            data = dict(row)
+            data["config"] = json.loads(str(data.get("config_json") or "{}"))
+            return data
+        return {
+            "id": "standard",
+            "name": "standard",
+            "config_json": json.dumps(
+                {
+                    "max_chars": 1800,
+                    "join_hyphenated_lines": True,
+                    "collapse_blank_lines": True,
+                    "collapse_spaces": True,
+                    "remove_soft_hyphens": True,
+                    "strip_trailing_whitespace": True,
+                    "trim": True,
+                    "max_blank_lines": 2,
+                },
+                ensure_ascii=False,
+            ),
+            "config": {
+                "max_chars": 1800,
+                "join_hyphenated_lines": True,
+                "collapse_blank_lines": True,
+                "collapse_spaces": True,
+                "remove_soft_hyphens": True,
+                "strip_trailing_whitespace": True,
+                "trim": True,
+                "max_blank_lines": 2,
+            },
+        }
+
+    def upsert_cleanup_profile(self, name: str, config: dict[str, object]) -> str:
+        profile_id = safe_name(name).lower().replace(" ", "_")
+        now = _now()
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                INSERT INTO cleanup_profiles(id, name, config_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    config_json = excluded.config_json,
+                    updated_at = excluded.updated_at
+                """,
+                (profile_id, name, json.dumps(config, ensure_ascii=False), now, now),
+            )
+        return profile_id
+
+    def set_book_cleanup_profile(self, book_id: str, cleanup_profile: str) -> None:
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                UPDATE books
+                SET cleanup_profile = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (cleanup_profile, _now(), book_id),
+            )
+        self.rechunk_book(book_id)
+
     def get_book_text(self, book_id: str) -> str:
         rows = self.db.conn.execute(
             """
@@ -228,6 +334,79 @@ class BookLibrary:
         if not rows:
             raise ValueError(f"Book has no chapters: {book_id}")
         return "\n\n".join(f"# {row['title']}\n\n{row['text']}" for row in rows)
+
+    def update_chapter(self, book_id: str, chapter_index: int, title: str, text: str) -> None:
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                UPDATE chapters
+                SET title = ?, text = ?
+                WHERE book_id = ? AND chapter_index = ?
+                """,
+                (title, text, book_id, chapter_index),
+            )
+            self.db.conn.execute(
+                """
+                UPDATE books
+                SET status = 'Needs Rechunk', updated_at = ?
+                WHERE id = ?
+                """,
+                (_now(), book_id),
+            )
+        self.rechunk_book(book_id)
+
+    def rechunk_book(self, book_id: str) -> None:
+        book = self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        profile = self.get_cleanup_profile(str(book.get("cleanup_profile") or "standard"))
+        profile_config = profile.get("config", {})
+        chapter_rows = self.get_chapters(book_id)
+        cleaned_chapters: list[Chapter] = []
+        for row in chapter_rows:
+            cleaned_chapters.append(
+                Chapter(
+                    index=int(row["chapter_index"]),
+                    title=str(row["title"]),
+                    text=clean_text(str(row["text"]), profile_config),
+                )
+            )
+        chunks = chunk_chapters(cleaned_chapters, profile=profile_config)
+        with self.db.conn:
+            self.db.conn.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+            for chunk in chunks:
+                self.db.conn.execute(
+                    """
+                    INSERT INTO chunks(id, book_id, chapter_index, chunk_index, text, text_hash, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        uuid.uuid4().hex,
+                        book_id,
+                        chunk.chapter_index,
+                        chunk.chunk_index,
+                        chunk.text,
+                        chunk.text_hash,
+                        "Ready",
+                    ),
+                )
+            self.db.conn.execute("DELETE FROM outputs WHERE book_id = ?", (book_id,))
+            self.db.conn.execute(
+                """
+                UPDATE books
+                SET status = 'Imported', updated_at = ?
+                WHERE id = ?
+                """,
+                (_now(), book_id),
+            )
+        self._clear_render_artifacts(book_id)
+
+    def _clear_render_artifacts(self, book_id: str) -> None:
+        book_dir = self.root / "books" / book_id
+        for rel in ["audio_chunks", "output"]:
+            path = book_dir / rel
+            if path.exists():
+                shutil.rmtree(path, ignore_errors=True)
 
     def save_podcast_script(self, book_id: str, script: dict[str, object]) -> Path:
         book = self.get_book(book_id)
@@ -257,6 +436,71 @@ class BookLibrary:
             )
         return out_path
 
+    def upsert_voice(self, provider: str, name: str, locale: str | None = None, config: dict | None = None) -> str:
+        voice_id = f"{provider}:{name}"
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                INSERT INTO voices(id, provider, name, locale, config_json)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    provider = excluded.provider,
+                    name = excluded.name,
+                    locale = excluded.locale,
+                    config_json = excluded.config_json
+                """,
+                (voice_id, provider, name, locale, json.dumps(config or {}, ensure_ascii=False)),
+            )
+        return voice_id
+
+    def sync_speakers(
+        self,
+        book_id: str,
+        speaker_names: list[str],
+        voice_map: dict[str, str] | None = None,
+        provider: str = "windows_sapi",
+    ) -> None:
+        voice_ids: dict[str, str | None] = {}
+        if voice_map:
+            for speaker_name in speaker_names:
+                if speaker_name in voice_map and voice_map[speaker_name]:
+                    voice_ids[speaker_name] = self.upsert_voice(provider, voice_map[speaker_name])
+                else:
+                    voice_ids[speaker_name] = None
+
+        with self.db.conn:
+            self.db.conn.execute("DELETE FROM speakers WHERE book_id = ?", (book_id,))
+            for speaker_name in speaker_names:
+                self.db.conn.execute(
+                    """
+                    INSERT INTO speakers(id, book_id, name, voice_id)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (uuid.uuid4().hex, book_id, speaker_name, voice_ids.get(speaker_name)),
+                )
+
+    def list_speakers(self, book_id: str) -> list[dict[str, object]]:
+        rows = self.db.conn.execute(
+            """
+            SELECT s.name, s.voice_id, v.provider, v.name AS voice_name, v.locale
+            FROM speakers s
+            LEFT JOIN voices v ON v.id = s.voice_id
+            WHERE s.book_id = ?
+            ORDER BY s.name
+            """,
+            (book_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_voices(self) -> list[dict[str, object]]:
+        rows = self.db.conn.execute(
+            """
+            SELECT * FROM voices
+            ORDER BY provider, name
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def render_book(
         self,
         book_id: str,
@@ -281,20 +525,83 @@ class BookLibrary:
         if not chunks:
             raise ValueError(f"Book has no chunks: {book_id}")
 
+        chapter_rows = self.get_chapters(book_id)
+        chapter_titles = {int(row["chapter_index"]): str(row["title"]) for row in chapter_rows}
         chunk_dir = self.root / "books" / book_id / "audio_chunks"
         rendered: list[Path] = []
+        rendered_meta: list[tuple[int, Path]] = []
         for chunk in chunks:
             out_wav = chunk_dir / f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_{chunk['text_hash'][:12]}.wav"
             if not out_wav.exists() or out_wav.stat().st_size == 0:
                 provider.synthesize(str(chunk["text"]), out_wav, voice=voice, rate=rate)
                 self._mark_chunk_rendered(str(chunk["id"]), out_wav)
             rendered.append(out_wav)
+            rendered_meta.append((int(chunk["chapter_index"]), out_wav))
 
         output_dir = self.root / "books" / book_id / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_name = f"{safe_name(str(book['author']))} - {safe_name(str(book['title']))}.{output_format.lower()}"
         output_path = output_dir / output_name
-        assemble_audio(rendered, output_path, output_format, ffmpeg=ffmpeg)
+        timeline = chapter_timeline(rendered_meta, chapter_titles) if output_format.lower() == "m4b" else None
+        assemble_kwargs = {"ffmpeg": ffmpeg}
+        if timeline is not None:
+            assemble_kwargs["chapters"] = timeline
+        assemble_audio(rendered, output_path, output_format, **assemble_kwargs)
+        self._add_output(book_id, output_format, output_path)
+        return output_path
+
+    def render_podcast_script(
+        self,
+        book_id: str,
+        script: PodcastScript,
+        *,
+        output_format: str = "opus",
+        provider: TtsProvider | None = None,
+        voice_map: dict[str, str] | None = None,
+        ffmpeg: str = "ffmpeg",
+        rate: int = 0,
+    ) -> Path:
+        book = self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        provider = provider or WindowsSapiProvider()
+        if not provider.health():
+            raise RuntimeError(f"TTS provider not available: {provider.id}")
+        if not script.turns:
+            raise ValueError("Podcast script has no turns")
+
+        speaker_names = list(dict.fromkeys(script.speakers or [turn.speaker for turn in script.turns]))
+        self.sync_speakers(book_id, speaker_names, voice_map=voice_map, provider=provider.id)
+
+        voice_by_speaker = voice_map or {}
+        default_voice = None
+        voices = provider.list_voices()
+        if voices:
+            default_voice = voices[0].id
+
+        podcast_dir = self.root / "books" / book_id / "podcasts" / safe_name(script.title)
+        chunk_dir = podcast_dir / "audio_chunks"
+        chunk_dir.mkdir(parents=True, exist_ok=True)
+
+        rendered: list[Path] = []
+        elapsed = 0.0
+        chapter_marks: list[tuple[str, float]] = []
+        for index, turn in enumerate(script.turns):
+            voice_name = voice_by_speaker.get(turn.speaker) or default_voice
+            out_wav = chunk_dir / f"t{index:04d}_{safe_name(turn.speaker)}.wav"
+            if not out_wav.exists() or out_wav.stat().st_size == 0:
+                provider.synthesize(turn.text, out_wav, voice=voice_name, rate=rate)
+            rendered.append(out_wav)
+            chapter_marks.append((turn.speaker, elapsed))
+            elapsed += probe_duration(out_wav)
+
+        output_path = podcast_dir / f"{safe_name(script.title)}.{output_format.lower()}"
+        timeline = chapter_marks if output_format.lower() == "m4b" else None
+        assemble_kwargs = {"ffmpeg": ffmpeg}
+        if timeline is not None:
+            assemble_kwargs["chapters"] = timeline
+        assemble_audio(rendered, output_path, output_format, **assemble_kwargs)
+        self.save_podcast_script(book_id, script.to_dict())
         self._add_output(book_id, output_format, output_path)
         return output_path
 
@@ -318,6 +625,9 @@ class BookLibrary:
                 """,
                 (uuid.uuid4().hex, book_id, output_format.lower(), str(output_path), _now()),
             )
+
+    def add_output(self, book_id: str, output_format: str, output_path: Path) -> None:
+        self._add_output(book_id, output_format, output_path)
 
 
 def _now() -> str:
