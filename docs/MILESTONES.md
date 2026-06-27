@@ -50,3 +50,18 @@
 - Keep local LLM resident. Done.
 - Support user interruptions and generated follow-up segments. Done.
 - Stream partial render/playback. Done.
+
+## M7 Rust Workbench Migration
+
+- Add Rust workspace and Slint workbench MVP. Done.
+- Keep Python backend as JSONL bridge during migration. Done.
+- Add queue log, cancel hook, diagnostics, import controls, TTS engine selection. Done.
+- Add configurable `audio.cpp` external-process TTS provider. Done.
+- Add `audio.cpp` upstream check with `Update Available` flag. Done.
+- Replace queue log with structured job rows. Done.
+- Add Calibre scan preview and ID-based import in Rust workbench. Done.
+- Add source/chapter preview panes and render sample before full queue. Done.
+- Add voice discovery/selection and output-open actions. Done.
+- Persist Rust UI settings and add structured views instead of one-page workbench. Done.
+- Add a real build/package command and a final end-to-end acceptance script. Done.
+- Next: validate real `audio.cpp` CLI arguments against an installed binary/model and polish visual design.

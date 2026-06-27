@@ -501,6 +501,25 @@ class BookLibrary:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_outputs(self, book_id: str | None = None) -> list[dict[str, object]]:
+        if book_id:
+            rows = self.db.conn.execute(
+                """
+                SELECT * FROM outputs
+                WHERE book_id = ?
+                ORDER BY created_at DESC
+                """,
+                (book_id,),
+            ).fetchall()
+        else:
+            rows = self.db.conn.execute(
+                """
+                SELECT * FROM outputs
+                ORDER BY created_at DESC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def render_book(
         self,
         book_id: str,

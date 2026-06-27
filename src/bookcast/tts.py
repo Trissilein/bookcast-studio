@@ -101,6 +101,69 @@ $s.Dispose()
             raise RuntimeError(f"Windows SAPI produced no audio: {output_wav}")
 
 
+class AudioCppProvider(TtsProvider):
+    id = "audio_cpp"
+
+    def __init__(
+        self,
+        executable: str,
+        *,
+        model: str,
+        backend: str = "cpu",
+        family: str | None = None,
+    ) -> None:
+        self.executable = executable
+        self.model = model
+        self.backend = backend
+        self.family = family
+
+    def health(self) -> bool:
+        try:
+            proc = subprocess.run(
+                [self.executable, "--help"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            return False
+        return proc.returncode in {0, 1}
+
+    def list_voices(self) -> list[TtsVoice]:
+        return [TtsVoice(id="default", label="audio.cpp default")]
+
+    def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
+        if not self.model:
+            raise RuntimeError("audio.cpp model path/name is required")
+        output_wav = Path(output_wav)
+        output_wav.parent.mkdir(parents=True, exist_ok=True)
+        args = [
+            self.executable,
+            "--task",
+            "tts",
+            "--model",
+            self.model,
+            "--backend",
+            self.backend,
+            "--text",
+            text,
+            "--out",
+            str(output_wav),
+        ]
+        if self.family:
+            args.extend(["--family", self.family])
+        if voice:
+            args.extend(["--voice", voice])
+        if rate:
+            args.extend(["--rate", str(rate)])
+        proc = subprocess.run(args, check=False, capture_output=True, text=True)
+        if proc.returncode != 0:
+            detail = proc.stderr.strip() or proc.stdout.strip()
+            raise RuntimeError(f"audio.cpp synthesis failed: {detail}")
+        if not output_wav.exists() or output_wav.stat().st_size == 0:
+            raise RuntimeError(f"audio.cpp produced no audio: {output_wav}")
+
+
 def play_wav(path: Path, powershell: str = "powershell") -> None:
     path = Path(path)
     if not path.exists():

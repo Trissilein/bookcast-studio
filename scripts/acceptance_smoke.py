@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run BookCast end-to-end acceptance smoke.")
+    parser.add_argument("--library", type=Path, default=None)
+    parser.add_argument("--keep", action="store_true", help="Keep temporary library/source files.")
+    parser.add_argument("--skip-render", action="store_true", help="Stop before TTS/ffmpeg render.")
+    args = parser.parse_args()
+
+    repo = Path(__file__).resolve().parents[1]
+    temp_dir = Path(tempfile.mkdtemp(prefix="bookcast-acceptance-"))
+    library = args.library or temp_dir / "library"
+    source = temp_dir / "Ada Author - Acceptance Smoke.txt"
+    source.write_text(
+        "Chapter one starts here. This is a short acceptance sample.\n\n"
+        "Second paragraph exists so cleanup and chunking have real input.",
+        encoding="utf-8",
+    )
+
+    try:
+        diagnose = run_bridge(repo, ["diagnose", "--library", str(library)])
+        assert_event(diagnose, "diagnostic")
+        require(diagnose[0].get("ffmpeg"), "ffmpeg missing from PATH")
+        require(diagnose[0].get("windows_sapi"), "Windows SAPI unavailable")
+
+        voices = run_bridge(repo, ["voices"])
+        assert_event(voices, "voices")
+        require(voices[0].get("voices"), "No TTS voices discovered")
+        voice = str(voices[0]["voices"][0]["id"])
+
+        imported = run_bridge(repo, ["import", str(source), "--library", str(library)])
+        assert_event(imported, "job_done")
+        book_id = str(imported[-1]["book_id"])
+
+        preview = run_bridge(repo, ["book-preview", book_id, "--library", str(library)])
+        assert_event(preview, "book_preview")
+        require("Acceptance Smoke" in str(preview[0].get("preview", "")), "Preview missing expected text")
+
+        if not args.skip_render:
+            sample = run_bridge(
+                repo,
+                ["sample-render", book_id, "--library", str(library), "--format", "opus", "--voice", voice],
+            )
+            assert_event(sample, "job_done")
+            sample_path = Path(str(sample[-1]["output"]))
+            require(sample_path.exists(), f"Sample output missing: {sample_path}")
+
+            rendered = run_bridge(
+                repo,
+                ["render", book_id, "--library", str(library), "--format", "opus", "--voice", voice],
+            )
+            assert_event(rendered, "job_done")
+            output_path = Path(str(rendered[-1]["output"]))
+            require(output_path.exists(), f"Render output missing: {output_path}")
+
+            outputs = run_bridge(repo, ["outputs", "--library", str(library), "--book-id", book_id])
+            assert_event(outputs, "outputs")
+            require(outputs[0].get("outputs"), "Outputs list is empty after render")
+
+        print(json.dumps({"ok": True, "library": str(library), "book_id": book_id}, indent=2))
+        return 0
+    finally:
+        if args.library is None and not args.keep:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def run_bridge(repo: Path, args: list[str]) -> list[dict[str, object]]:
+    proc = subprocess.run(
+        [python(repo), "-m", "bookcast", "bridge", *args],
+        cwd=repo,
+        env={**dict_environ(), "PYTHONPATH": str(repo / "src")},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"Bridge command failed: {' '.join(args)}\n{proc.stdout}\n{proc.stderr}")
+    events = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    require(events, f"Bridge command emitted no events: {' '.join(args)}")
+    return events
+
+
+def python(repo: Path) -> str:
+    venv = repo / ".venv" / "Scripts" / "python.exe"
+    return str(venv) if venv.exists() else sys.executable
+
+
+def dict_environ() -> dict[str, str]:
+    import os
+
+    return dict(os.environ)
+
+
+def assert_event(events: list[dict[str, object]], name: str) -> None:
+    require(any(event.get("event") == name for event in events), f"Missing event: {name}")
+
+
+def require(value: object, message: str) -> None:
+    if not value:
+        raise RuntimeError(message)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

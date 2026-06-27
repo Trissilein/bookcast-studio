@@ -8,4 +8,6 @@ build/
 *.egg-info/
 bookcast.sqlite3
 library/
-
+target/
+rust/**/target/
+.bookcast-workbench.json

@@ -1,0 +1,1468 @@
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+slint::slint! {
+import { Button, ComboBox, LineEdit } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "BookCast Studio";
+    width: 1220px;
+    height: 780px;
+
+    in-out property <string> library-path: "library";
+    in-out property <string> source-path: "";
+    in-out property <string> calibre-path: "";
+    in-out property <string> calibre-ids: "";
+    in-out property <string> calibre-preview-text: "No Calibre scan yet.";
+    in-out property <string> book-id: "";
+    in-out property <string> voice-name: "";
+    in-out property <string> voice-list-text: "Discover voices before choosing one.";
+    in-out property <string> output-format: "opus";
+    in-out property <string> last-output-path: "";
+    in-out property <string> audio-cpp-exe: "";
+    in-out property <string> audio-cpp-model: "";
+    in-out property <string> audio-cpp-backend: "cpu";
+    in-out property <string> audio-cpp-family: "";
+    in-out property <int> engine-index: 0;
+    in-out property <string> status-text: "Ready";
+    in-out property <string> diagnostic-text: "Run diagnostics before importing.";
+    in-out property <string> books-text: "No books loaded.";
+    in-out property <string> book-preview-text: "Select or import a book, then load preview.";
+    in-out property <string> queue-text: "Queue idle.";
+    in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
+    in-out property <string> audio-cpp-status: "audio.cpp: not checked";
+    in-out property <int> current-view: 0;
+
+    callback save-settings();
+    callback diagnose();
+    callback list-books();
+    callback import-source();
+    callback scan-calibre();
+    callback import-calibre();
+    callback load-preview();
+    callback sample-render();
+    callback render-book();
+    callback discover-voices();
+    callback open-output();
+    callback refresh-audio-cpp();
+    callback cancel-job();
+
+    Rectangle {
+        background: rgb(245, 242, 234);
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            Rectangle {
+                width: 220px;
+                background: rgb(22, 34, 29);
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 16px;
+
+                    Text {
+                        text: "BookCast";
+                        color: rgb(248, 241, 222);
+                        font-size: 28px;
+                        font-weight: 800;
+                    }
+
+                    Button { text: "TTS Studio"; clicked => { root.current-view = 0; } }
+                    Button { text: "Import"; clicked => { root.current-view = 1; } }
+                    Button { text: "Library"; clicked => { root.current-view = 2; } }
+                    Button { text: "Settings"; clicked => { root.current-view = 3; } }
+
+                    Rectangle { height: 1px; background: rgb(48, 64, 57); }
+
+                    Text {
+                        text: root.audio-cpp-status;
+                        color: rgb(242, 200, 121);
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 14px;
+
+                Rectangle {
+                    height: 82px;
+                    background: rgb(255, 255, 255);
+                    border-color: rgb(215, 208, 191);
+                    border-width: 1px;
+                    border-radius: 6px;
+
+                    HorizontalLayout {
+                        padding: 14px;
+                        spacing: 14px;
+
+                        VerticalLayout {
+                            spacing: 5px;
+                            Text { text: "Workbench"; font-size: 24px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: root.status-text; font-size: 14px; color: rgb(89, 99, 93); }
+                        }
+
+                        Button { text: "Diagnose"; clicked => { root.diagnose(); } }
+                        Button { text: "Refresh Books"; clicked => { root.list-books(); } }
+                        Button { text: "Check audio.cpp"; clicked => { root.refresh-audio-cpp(); } }
+                        Button { text: "Cancel"; clicked => { root.cancel-job(); } }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 14px;
+
+                    Rectangle {
+                        width: 660px;
+                        visible: root.current-view == 0;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            Text { text: "TTS Studio"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+
+                            Text { text: "Library root"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.library-path; }
+
+                            Text { text: "Book id"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.book-id; }
+                            Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+
+                            Text { text: "Engine"; color: rgb(89, 99, 93); }
+                            ComboBox {
+                                model: ["Windows SAPI via Python bridge", "audio.cpp external process"];
+                                current-index <=> root.engine-index;
+                            }
+                            Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Output"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.output-format; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Voice"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.voice-name; }
+                                }
+                            }
+                            Text {
+                                text: root.voice-list-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+
+                            Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-exe; }
+                            Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-model; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Backend"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.audio-cpp-backend; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Family"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.audio-cpp-family; }
+                                }
+                            }
+
+                            Button { text: "Render Sample"; clicked => { root.sample-render(); } }
+                            Button { text: "Add Render Job"; clicked => { root.render-book(); } }
+                            Text { text: "Last Output"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+
+                            Text { text: "Preview"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: root.book-preview-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.current-view == 1;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            Text { text: "Import Wizard"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Source file"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.source-path; }
+                            Button { text: "Import Source"; clicked => { root.import-source(); } }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+
+                            Text { text: "Calibre library"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.calibre-path; }
+                            Button { text: "Scan Calibre"; clicked => { root.scan-calibre(); } }
+                            Text { text: "Calibre IDs"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.calibre-ids; }
+                            Button { text: "Import Calibre IDs"; clicked => { root.import-calibre(); } }
+                            Text {
+                                text: root.calibre-preview-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+
+                            Text { text: "Guidance"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: root.guide-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 14px;
+                                wrap: word-wrap;
+                            }
+
+                            Text { text: "Diagnostics"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: root.diagnostic-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+
+                            Text { text: "Books"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: root.books-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.current-view == 2;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            Text { text: "Library"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Button { text: "Refresh Books"; clicked => { root.list-books(); } }
+                            Text {
+                                text: root.books-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text { text: "Book id"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.book-id; }
+                            Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                            Text {
+                                text: root.book-preview-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text { text: "Last Output"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.current-view == 3;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            Text { text: "Settings"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Library root"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.library-path; }
+                            Text { text: "Default output format"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.output-format; }
+                            Text { text: "Default voice"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.voice-name; }
+                            Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-exe; }
+                            Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-model; }
+                            Text { text: "audio.cpp backend"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-backend; }
+                            Text { text: "audio.cpp family"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.audio-cpp-family; }
+                            Button { text: "Save Settings"; clicked => { root.save-settings(); } }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 210px;
+                    background: rgb(17, 23, 19);
+                    border-radius: 6px;
+
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 8px;
+                        Text { text: "Queue"; color: rgb(248, 241, 222); font-size: 18px; font-weight: 700; }
+                        Text {
+                            text: root.queue-text;
+                            color: rgb(203, 216, 207);
+                            font-size: 13px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+}
+
+const AUDIO_CPP_REMOTE: &str = "https://github.com/0xShug0/audio.cpp";
+const AUDIO_CPP_PINNED: &str = include_str!("../audio_cpp.lock");
+
+#[derive(Clone)]
+struct AppState {
+    repo_root: PathBuf,
+    active_pid: Arc<Mutex<Option<u32>>>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+}
+
+#[derive(Clone)]
+struct JobState {
+    id: u64,
+    label: String,
+    status: String,
+    progress: u8,
+    detail: String,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct WorkbenchSettings {
+    library_path: String,
+    source_path: String,
+    calibre_path: String,
+    calibre_ids: String,
+    book_id: String,
+    voice_name: String,
+    output_format: String,
+    last_output_path: String,
+    audio_cpp_exe: String,
+    audio_cpp_model: String,
+    audio_cpp_backend: String,
+    audio_cpp_family: String,
+    engine_index: i32,
+    current_view: i32,
+}
+
+fn main() -> Result<(), slint::PlatformError> {
+    let app = AppWindow::new()?;
+    let state = AppState {
+        repo_root: find_repo_root(),
+        active_pid: Arc::new(Mutex::new(None)),
+        jobs: Arc::new(Mutex::new(Vec::new())),
+    };
+
+    app.set_library_path("library".into());
+    app.set_guide_text("Run Diagnose. If ffmpeg and TTS are ready, import a file or scan Calibre. Render jobs go through the queue and can be cancelled.".into());
+    load_settings(&app, &state.repo_root);
+
+    wire_callbacks(&app, state);
+    app.run()
+}
+
+fn wire_callbacks(app: &AppWindow, state: AppState) {
+    let weak = app.as_weak();
+    let settings_state = state.clone();
+    app.on_save_settings(move || {
+        let Some(app) = weak.upgrade() else { return };
+        match save_settings(&app, &settings_state.repo_root) {
+            Ok(path) => app.set_status_text(format!("Settings saved: {}", path.display()).into()),
+            Err(error) => app.set_status_text(format!("Settings save failed: {error}").into()),
+        }
+    });
+
+    let weak = app.as_weak();
+    let diagnose_state = state.clone();
+    app.on_diagnose(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let library = app.get_library_path().to_string();
+        run_bridge(
+            app.as_weak(),
+            diagnose_state.clone(),
+            "diagnose",
+            vec![
+                "bridge".into(),
+                "diagnose".into(),
+                "--library".into(),
+                library,
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let list_state = state.clone();
+    app.on_list_books(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let library = app.get_library_path().to_string();
+        run_bridge(
+            app.as_weak(),
+            list_state.clone(),
+            "list",
+            vec!["bridge".into(), "list".into(), "--library".into(), library],
+        );
+    });
+
+    let weak = app.as_weak();
+    let import_state = state.clone();
+    app.on_import_source(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let library = app.get_library_path().to_string();
+        let source = app.get_source_path().to_string();
+        if source.trim().is_empty() {
+            app.set_status_text("Import needs a source path.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            import_state.clone(),
+            "import",
+            vec![
+                "bridge".into(),
+                "import".into(),
+                source,
+                "--library".into(),
+                library,
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let calibre_state = state.clone();
+    app.on_scan_calibre(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let calibre = app.get_calibre_path().to_string();
+        if calibre.trim().is_empty() {
+            app.set_status_text("Calibre scan needs a library path.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            calibre_state.clone(),
+            "calibre scan",
+            vec!["bridge".into(), "calibre-scan".into(), calibre],
+        );
+    });
+
+    let weak = app.as_weak();
+    let calibre_import_state = state.clone();
+    app.on_import_calibre(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let calibre = app.get_calibre_path().to_string();
+        if calibre.trim().is_empty() {
+            app.set_status_text("Calibre import needs a library path.".into());
+            return;
+        }
+        let mut args = vec![
+            "bridge".into(),
+            "calibre-import".into(),
+            calibre,
+            "--library".into(),
+            app.get_library_path().to_string(),
+        ];
+        for id in split_ids(&app.get_calibre_ids().to_string()) {
+            args.extend(["--id".into(), id]);
+        }
+        run_bridge(
+            app.as_weak(),
+            calibre_import_state.clone(),
+            "calibre import",
+            args,
+        );
+    });
+
+    let weak = app.as_weak();
+    let voice_state = state.clone();
+    app.on_discover_voices(move || {
+        let Some(app) = weak.upgrade() else { return };
+        run_bridge(
+            app.as_weak(),
+            voice_state.clone(),
+            "voices",
+            voice_args(&app),
+        );
+    });
+
+    let weak = app.as_weak();
+    app.on_open_output(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let output = app.get_last_output_path().to_string();
+        if output.trim().is_empty() {
+            app.set_status_text("No output path to open.".into());
+            return;
+        }
+        open_output(app.as_weak(), output);
+    });
+
+    let weak = app.as_weak();
+    let render_state = state.clone();
+    app.on_load_preview(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Preview needs a book id.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            render_state.clone(),
+            "preview",
+            vec![
+                "bridge".into(),
+                "book-preview".into(),
+                book_id,
+                "--library".into(),
+                app.get_library_path().to_string(),
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let sample_state = state.clone();
+    app.on_sample_render(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Sample render needs a book id.".into());
+            return;
+        }
+        let args = render_args(&app, "sample-render", book_id);
+        run_bridge(app.as_weak(), sample_state.clone(), "sample render", args);
+    });
+
+    let weak = app.as_weak();
+    let render_state = state.clone();
+    app.on_render_book(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Render needs a book id. Use Refresh Books after import.".into());
+            return;
+        }
+        let args = render_args(&app, "render", book_id);
+        run_bridge(app.as_weak(), render_state.clone(), "render", args);
+    });
+
+    let weak = app.as_weak();
+    let refresh_state = state.clone();
+    app.on_refresh_audio_cpp(move || {
+        refresh_audio_cpp(weak.clone(), refresh_state.repo_root.clone());
+    });
+
+    let weak = app.as_weak();
+    let cancel_state = state;
+    app.on_cancel_job(move || {
+        cancel_active_job(weak.clone(), cancel_state.active_pid.clone());
+    });
+}
+
+fn run_bridge(
+    weak: slint::Weak<AppWindow>,
+    state: AppState,
+    label: &'static str,
+    args: Vec<String>,
+) {
+    let job_id = create_job(
+        weak.clone(),
+        state.jobs.clone(),
+        label,
+        "queued",
+        0,
+        "Waiting",
+    );
+    set_status(weak.clone(), &format!("Running {label}..."));
+    thread::spawn(move || {
+        update_job(
+            weak.clone(),
+            state.jobs.clone(),
+            job_id,
+            "running",
+            1,
+            "Process started",
+        );
+        let (program, mut base_args) = python_invocation(&state.repo_root);
+        base_args.extend(["-m".into(), "bookcast".into()]);
+        base_args.extend(args);
+
+        let mut command = Command::new(program);
+        command
+            .args(base_args)
+            .current_dir(&state.repo_root)
+            .env("PYTHONPATH", state.repo_root.join("src"))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        match command.spawn() {
+            Ok(child) => {
+                let pid = child.id();
+                *state.active_pid.lock().expect("pid lock") = Some(pid);
+                let output = child.wait_with_output();
+                *state.active_pid.lock().expect("pid lock") = None;
+                match output {
+                    Ok(output) => {
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        if output.status.success() {
+                            set_status(weak.clone(), &format!("{label} completed."));
+                            update_job(
+                                weak.clone(),
+                                state.jobs.clone(),
+                                job_id,
+                                "done",
+                                100,
+                                "Completed",
+                            );
+                        } else {
+                            set_status(weak.clone(), &format!("{label} failed."));
+                            update_job(
+                                weak.clone(),
+                                state.jobs.clone(),
+                                job_id,
+                                "failed",
+                                100,
+                                "Process failed",
+                            );
+                        }
+                        handle_bridge_events(weak.clone(), state.jobs.clone(), job_id, &stdout);
+                        let mut text = String::new();
+                        if !stdout.trim().is_empty() {
+                            text.push_str(stdout.trim());
+                        }
+                        if !stderr.trim().is_empty() {
+                            if !text.is_empty() {
+                                text.push_str("\n");
+                            }
+                            text.push_str(stderr.trim());
+                        }
+                        if text.is_empty() {
+                            text = format!("{label} finished with no output.");
+                        }
+                        update_job_detail(
+                            weak.clone(),
+                            state.jobs.clone(),
+                            job_id,
+                            &summarize_output(&text),
+                        );
+                        if label == "diagnose" {
+                            set_diagnostics(weak.clone(), &text);
+                        }
+                    }
+                    Err(error) => {
+                        set_status(weak.clone(), &format!("{label} failed."));
+                        update_job(
+                            weak.clone(),
+                            state.jobs.clone(),
+                            job_id,
+                            "failed",
+                            100,
+                            &format!("Failed to read process output: {error}"),
+                        );
+                    }
+                }
+            }
+            Err(error) => {
+                set_status(weak.clone(), &format!("{label} failed."));
+                update_job(
+                    weak.clone(),
+                    state.jobs.clone(),
+                    job_id,
+                    "failed",
+                    100,
+                    &format!("Failed to start Python bridge: {error}"),
+                );
+            }
+        }
+    });
+}
+
+fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
+    set_status(weak.clone(), "Checking audio.cpp upstream...");
+    thread::spawn(move || {
+        let pinned = AUDIO_CPP_PINNED.trim();
+        let output = Command::new("git")
+            .args(["ls-remote", AUDIO_CPP_REMOTE, "HEAD"])
+            .current_dir(repo_root)
+            .output();
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let remote = stdout.split_whitespace().next().unwrap_or("").trim();
+                let status = if remote.is_empty() {
+                    "audio.cpp: remote returned no HEAD".to_string()
+                } else if remote == pinned {
+                    format!("audio.cpp: pinned {} is current", short_hash(pinned))
+                } else {
+                    format!(
+                        "audio.cpp: Update Available, pinned {} remote {}",
+                        short_hash(pinned),
+                        short_hash(remote)
+                    )
+                };
+                set_audio_status(weak.clone(), &status);
+                push_log(weak.clone(), &status);
+                set_status(weak, "audio.cpp check completed.");
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let detail = stderr.trim();
+                set_audio_status(weak.clone(), "audio.cpp: check failed");
+                push_log(
+                    weak.clone(),
+                    if detail.is_empty() {
+                        "audio.cpp check failed."
+                    } else {
+                        detail
+                    },
+                );
+                set_status(weak, "audio.cpp check failed.");
+            }
+            Err(error) => {
+                set_audio_status(weak.clone(), "audio.cpp: git not available");
+                push_log(weak.clone(), &format!("audio.cpp check failed: {error}"));
+                set_status(weak, "audio.cpp check failed.");
+            }
+        }
+    });
+}
+
+fn cancel_active_job(weak: slint::Weak<AppWindow>, active_pid: Arc<Mutex<Option<u32>>>) {
+    let pid = *active_pid.lock().expect("pid lock");
+    let Some(pid) = pid else {
+        set_status(weak.clone(), "No active job to cancel.");
+        return;
+    };
+    #[cfg(windows)]
+    let result = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output();
+    #[cfg(not(windows))]
+    let result = Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => {
+            set_status(weak.clone(), "Cancel sent.");
+            push_log(weak, &format!("Cancelled process {pid}."));
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            set_status(weak.clone(), "Cancel failed.");
+            push_log(weak, &format!("Cancel failed for {pid}: {}", stderr.trim()));
+        }
+        Err(error) => {
+            set_status(weak.clone(), "Cancel failed.");
+            push_log(weak, &format!("Cancel failed for {pid}: {error}"));
+        }
+    }
+}
+
+fn open_output(weak: slint::Weak<AppWindow>, output: String) {
+    let path = PathBuf::from(output.trim());
+    let target = if path.is_dir() {
+        path
+    } else {
+        path.parent().map(Path::to_path_buf).unwrap_or(path)
+    };
+    #[cfg(windows)]
+    let result = Command::new("explorer").arg(target).output();
+    #[cfg(not(windows))]
+    let result = Command::new("xdg-open").arg(target).output();
+
+    match result {
+        Ok(output) if output.status.success() => set_status(weak, "Output opened."),
+        Ok(output) => {
+            let detail = String::from_utf8_lossy(&output.stderr);
+            set_status(weak, &format!("Open output failed: {}", detail.trim()));
+        }
+        Err(error) => set_status(weak, &format!("Open output failed: {error}")),
+    }
+}
+
+fn python_invocation(repo_root: &Path) -> (String, Vec<String>) {
+    let venv_python = repo_root.join(".venv").join("Scripts").join("python.exe");
+    if venv_python.exists() {
+        return (venv_python.to_string_lossy().to_string(), Vec::new());
+    }
+    ("py".to_string(), vec!["-3".to_string()])
+}
+
+fn find_repo_root() -> PathBuf {
+    let mut dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    loop {
+        if dir.join("pyproject.toml").exists() {
+            return dir;
+        }
+        if !dir.pop() {
+            return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        }
+    }
+}
+
+fn settings_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".bookcast-workbench.json")
+}
+
+fn load_settings(app: &AppWindow, repo_root: &Path) {
+    let path = settings_path(repo_root);
+    let Ok(raw) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(settings) = serde_json::from_str::<WorkbenchSettings>(&raw) else {
+        app.set_status_text(format!("Settings ignored, invalid JSON: {}", path.display()).into());
+        return;
+    };
+    if !settings.library_path.is_empty() {
+        app.set_library_path(settings.library_path.into());
+    }
+    app.set_source_path(settings.source_path.into());
+    app.set_calibre_path(settings.calibre_path.into());
+    app.set_calibre_ids(settings.calibre_ids.into());
+    app.set_book_id(settings.book_id.into());
+    app.set_voice_name(settings.voice_name.into());
+    if !settings.output_format.is_empty() {
+        app.set_output_format(settings.output_format.into());
+    }
+    app.set_last_output_path(settings.last_output_path.into());
+    app.set_audio_cpp_exe(settings.audio_cpp_exe.into());
+    app.set_audio_cpp_model(settings.audio_cpp_model.into());
+    if !settings.audio_cpp_backend.is_empty() {
+        app.set_audio_cpp_backend(settings.audio_cpp_backend.into());
+    }
+    app.set_audio_cpp_family(settings.audio_cpp_family.into());
+    app.set_engine_index(settings.engine_index);
+    app.set_current_view(settings.current_view);
+    app.set_status_text(format!("Settings loaded: {}", path.display()).into());
+}
+
+fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
+    let path = settings_path(repo_root);
+    let settings = WorkbenchSettings {
+        library_path: app.get_library_path().to_string(),
+        source_path: app.get_source_path().to_string(),
+        calibre_path: app.get_calibre_path().to_string(),
+        calibre_ids: app.get_calibre_ids().to_string(),
+        book_id: app.get_book_id().to_string(),
+        voice_name: app.get_voice_name().to_string(),
+        output_format: app.get_output_format().to_string(),
+        last_output_path: app.get_last_output_path().to_string(),
+        audio_cpp_exe: app.get_audio_cpp_exe().to_string(),
+        audio_cpp_model: app.get_audio_cpp_model().to_string(),
+        audio_cpp_backend: app.get_audio_cpp_backend().to_string(),
+        audio_cpp_family: app.get_audio_cpp_family().to_string(),
+        engine_index: app.get_engine_index(),
+        current_view: app.get_current_view(),
+    };
+    let raw = serde_json::to_string_pretty(&settings).map_err(|error| error.to_string())?;
+    std::fs::write(&path, raw).map_err(|error| error.to_string())?;
+    Ok(path)
+}
+
+fn short_hash(value: &str) -> String {
+    value.chars().take(12).collect()
+}
+
+fn split_ids(value: &str) -> Vec<String> {
+    value
+        .split(|ch: char| ch == ',' || ch == ';' || ch.is_whitespace())
+        .filter_map(|part| {
+            let trimmed = part.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .collect()
+}
+
+fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        command.into(),
+        book_id,
+        "--library".into(),
+        app.get_library_path().to_string(),
+        "--format".into(),
+        app.get_output_format().to_string(),
+    ];
+    let voice = app.get_voice_name().to_string();
+    if !voice.trim().is_empty() {
+        args.extend(["--voice".into(), voice]);
+    }
+    if app.get_engine_index() == 1 {
+        args.extend(["--provider".into(), "audio_cpp".into()]);
+        args.extend([
+            "--audio-cpp-exe".into(),
+            app.get_audio_cpp_exe().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-model".into(),
+            app.get_audio_cpp_model().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-backend".into(),
+            app.get_audio_cpp_backend().to_string(),
+        ]);
+        let family = app.get_audio_cpp_family().to_string();
+        if !family.trim().is_empty() {
+            args.extend(["--audio-cpp-family".into(), family]);
+        }
+    }
+    args
+}
+
+fn voice_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec!["bridge".into(), "voices".into()];
+    if app.get_engine_index() == 1 {
+        args.extend(["--provider".into(), "audio_cpp".into()]);
+        args.extend([
+            "--audio-cpp-exe".into(),
+            app.get_audio_cpp_exe().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-model".into(),
+            app.get_audio_cpp_model().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-backend".into(),
+            app.get_audio_cpp_backend().to_string(),
+        ]);
+        let family = app.get_audio_cpp_family().to_string();
+        if !family.trim().is_empty() {
+            args.extend(["--audio-cpp-family".into(), family]);
+        }
+    }
+    args
+}
+
+fn create_job(
+    weak: slint::Weak<AppWindow>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+    label: &str,
+    status: &str,
+    progress: u8,
+    detail: &str,
+) -> u64 {
+    let id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    {
+        let mut jobs = jobs.lock().expect("jobs lock");
+        jobs.push(JobState {
+            id,
+            label: label.to_string(),
+            status: status.to_string(),
+            progress,
+            detail: detail.to_string(),
+        });
+    }
+    render_queue(weak, jobs);
+    id
+}
+
+fn update_job(
+    weak: slint::Weak<AppWindow>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+    id: u64,
+    status: &str,
+    progress: u8,
+    detail: &str,
+) {
+    {
+        let mut jobs = jobs.lock().expect("jobs lock");
+        if let Some(job) = jobs.iter_mut().find(|job| job.id == id) {
+            job.status = status.to_string();
+            job.progress = progress;
+            job.detail = detail.to_string();
+        }
+    }
+    render_queue(weak, jobs);
+}
+
+fn update_job_detail(
+    weak: slint::Weak<AppWindow>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+    id: u64,
+    detail: &str,
+) {
+    {
+        let mut jobs = jobs.lock().expect("jobs lock");
+        if let Some(job) = jobs.iter_mut().find(|job| job.id == id) {
+            job.detail = detail.to_string();
+        }
+    }
+    render_queue(weak, jobs);
+}
+
+fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
+    let text = {
+        let jobs = jobs.lock().expect("jobs lock");
+        if jobs.is_empty() {
+            "Queue idle.".to_string()
+        } else {
+            jobs.iter()
+                .rev()
+                .take(8)
+                .map(|job| {
+                    format!(
+                        "#{:05} | {:>7} | {:>3}% | {:<12} | {}",
+                        job.id % 100000,
+                        job.status,
+                        job.progress,
+                        job.label,
+                        job.detail
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+    };
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_queue_text(text.into());
+        }
+    });
+}
+
+fn summarize_output(text: &str) -> String {
+    text.lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| line.trim().chars().take(180).collect())
+        .unwrap_or_else(|| "No output".to_string())
+}
+
+fn handle_bridge_events(
+    weak: slint::Weak<AppWindow>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+    job_id: u64,
+    stdout: &str,
+) {
+    for line in stdout.lines() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        match value.get("event").and_then(Value::as_str) {
+            Some("job_started") => {
+                let job = value.get("job").and_then(Value::as_str).unwrap_or("job");
+                update_job(
+                    weak.clone(),
+                    jobs.clone(),
+                    job_id,
+                    "running",
+                    5,
+                    &format!("{job} started"),
+                );
+            }
+            Some("job_progress") => {
+                let progress = value
+                    .get("progress")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(50)
+                    .min(100) as u8;
+                let detail = value
+                    .get("chunks")
+                    .and_then(Value::as_i64)
+                    .map(|chunks| format!("{chunks} chunks"))
+                    .unwrap_or_else(|| "Progress update".to_string());
+                update_job(
+                    weak.clone(),
+                    jobs.clone(),
+                    job_id,
+                    "running",
+                    progress,
+                    &detail,
+                );
+            }
+            Some("job_done") => {
+                let detail = value
+                    .get("output")
+                    .and_then(Value::as_str)
+                    .or_else(|| value.get("book_id").and_then(Value::as_str))
+                    .unwrap_or("Done");
+                update_job(weak.clone(), jobs.clone(), job_id, "done", 100, detail);
+                if let Some(book_id) = value.get("book_id").and_then(Value::as_str) {
+                    set_book_id(weak.clone(), book_id);
+                    set_guide(
+                        weak.clone(),
+                        "Import finished. Book id was filled in. Choose engine and render.",
+                    );
+                }
+                if let Some(output) = value.get("output").and_then(Value::as_str) {
+                    set_last_output(weak.clone(), output);
+                    set_guide(weak.clone(), &format!("Render finished: {output}"));
+                }
+            }
+            Some("voices") => {
+                let voices = value
+                    .get("voices")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .map(|voice| {
+                                let id = voice.get("id").and_then(Value::as_str).unwrap_or("");
+                                let label =
+                                    voice.get("label").and_then(Value::as_str).unwrap_or(id);
+                                let locale =
+                                    voice.get("locale").and_then(Value::as_str).unwrap_or("");
+                                if locale.is_empty() {
+                                    format!("{id} | {label}")
+                                } else {
+                                    format!("{id} | {label} | {locale}")
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No voices returned.".to_string());
+                if let Some(first_id) = value
+                    .get("voices")
+                    .and_then(Value::as_array)
+                    .and_then(|items| items.first())
+                    .and_then(|voice| voice.get("id"))
+                    .and_then(Value::as_str)
+                {
+                    set_voice_name(weak.clone(), first_id);
+                }
+                set_voice_list(weak.clone(), &voices);
+                set_guide(
+                    weak.clone(),
+                    "Voices loaded. Voice field was filled with the first voice.",
+                );
+            }
+            Some("outputs") => {
+                if let Some(path) = value
+                    .get("outputs")
+                    .and_then(Value::as_array)
+                    .and_then(|items| items.first())
+                    .and_then(|output| output.get("path"))
+                    .and_then(Value::as_str)
+                {
+                    set_last_output(weak.clone(), path);
+                    set_guide(
+                        weak.clone(),
+                        "Last output loaded. Open Output will open its folder.",
+                    );
+                }
+            }
+            Some("diagnostic") => {
+                let ffmpeg = value
+                    .get("ffmpeg")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing");
+                let ffprobe = value
+                    .get("ffprobe")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing");
+                let calibredb = value
+                    .get("calibredb")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing");
+                let sapi = value
+                    .get("windows_sapi")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                set_diagnostics(
+                    weak.clone(),
+                    &format!("ffmpeg: {ffmpeg}\nffprobe: {ffprobe}\ncalibredb: {calibredb}\nWindows SAPI: {sapi}"),
+                );
+                set_guide(
+                    weak.clone(),
+                    if sapi {
+                        "Diagnostics OK enough for Windows SAPI render. Import a source or scan Calibre."
+                    } else {
+                        "Windows SAPI unavailable. Configure audio.cpp before rendering."
+                    },
+                );
+            }
+            Some("books") => {
+                let books = value
+                    .get("books")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .map(|book| {
+                                let id = book.get("id").and_then(Value::as_str).unwrap_or("");
+                                let author =
+                                    book.get("author").and_then(Value::as_str).unwrap_or("");
+                                let title = book.get("title").and_then(Value::as_str).unwrap_or("");
+                                let chunks =
+                                    book.get("chunk_count").and_then(Value::as_i64).unwrap_or(0);
+                                format!("{id} | {author} | {title} | {chunks} chunks")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_else(|| "No books loaded.".to_string());
+                set_books(weak.clone(), &books);
+                set_guide(
+                    weak.clone(),
+                    "Paste a book id from the Books list into TTS Studio, then render.",
+                );
+            }
+            Some("book_preview") => {
+                let book = value.get("book").unwrap_or(&Value::Null);
+                let title = book.get("title").and_then(Value::as_str).unwrap_or("");
+                let author = book.get("author").and_then(Value::as_str).unwrap_or("");
+                let chunk_count = value
+                    .get("chunk_count")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                let chapters = value
+                    .get("chapters")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(12)
+                            .map(|chapter| {
+                                let index =
+                                    chapter.get("index").and_then(Value::as_i64).unwrap_or(0);
+                                let title =
+                                    chapter.get("title").and_then(Value::as_str).unwrap_or("");
+                                let chars =
+                                    chapter.get("chars").and_then(Value::as_i64).unwrap_or(0);
+                                format!("{index}: {title} ({chars} chars)")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_default();
+                let preview = value.get("preview").and_then(Value::as_str).unwrap_or("");
+                set_book_preview(
+                    weak.clone(),
+                    &format!("{author} - {title}\n{chunk_count} chunks\n\n{chapters}\n\n{preview}"),
+                );
+                set_guide(
+                    weak.clone(),
+                    "Preview loaded. Render sample before full render.",
+                );
+            }
+            Some("calibre_books") => {
+                let books = value.get("books").and_then(Value::as_array);
+                let count = books.map_or(0, Vec::len);
+                let skipped = value.get("skipped").and_then(Value::as_i64).unwrap_or(0);
+                let preview = books
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(20)
+                            .map(|book| {
+                                let id = book.get("id").and_then(Value::as_str).unwrap_or("");
+                                let authors =
+                                    book.get("authors").and_then(Value::as_str).unwrap_or("");
+                                let title = book.get("title").and_then(Value::as_str).unwrap_or("");
+                                let formats = book
+                                    .get("formats")
+                                    .and_then(Value::as_array)
+                                    .map(|items| {
+                                        items
+                                            .iter()
+                                            .filter_map(Value::as_str)
+                                            .collect::<Vec<_>>()
+                                            .join(",")
+                                    })
+                                    .unwrap_or_default();
+                                format!("{id} | {authors} | {title} | {formats}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No importable Calibre books found.".to_string());
+                set_calibre_preview(weak.clone(), &preview);
+                if let Some(first_id) = books
+                    .and_then(|items| items.first())
+                    .and_then(|book| book.get("id"))
+                    .and_then(Value::as_str)
+                {
+                    set_calibre_ids(weak.clone(), first_id);
+                }
+                set_guide(
+                    weak.clone(),
+                    &format!("Calibre scan found {count} importable books, skipped {skipped}. Edit Calibre IDs, then import."),
+                );
+            }
+            Some("calibre_imported") => {
+                let title = value.get("title").and_then(Value::as_str).unwrap_or("");
+                let book_id = value.get("book_id").and_then(Value::as_str).unwrap_or("");
+                if !book_id.is_empty() {
+                    set_book_id(weak.clone(), book_id);
+                }
+                set_guide(
+                    weak.clone(),
+                    &format!("Imported from Calibre: {title}. Book id filled for render."),
+                );
+            }
+            Some("error") => {
+                if let Some(message) = value.get("message").and_then(Value::as_str) {
+                    update_job(weak.clone(), jobs.clone(), job_id, "failed", 100, message);
+                    set_guide(weak.clone(), &format!("Fix required: {message}"));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn push_log(weak: slint::Weak<AppWindow>, line: &str) {
+    let line = line.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            let current = app.get_queue_text().to_string();
+            let next = if current == "Queue idle." {
+                format!("status   |         |     | system       | {line}")
+            } else {
+                format!("{current}\nstatus   |         |     | system       | {line}")
+            };
+            app.set_queue_text(next.into());
+        }
+    });
+}
+
+fn set_status(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_status_text(text.into());
+        }
+    });
+}
+
+fn set_diagnostics(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_diagnostic_text(text.into());
+        }
+    });
+}
+
+fn set_books(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_books_text(text.into());
+        }
+    });
+}
+
+fn set_book_preview(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_book_preview_text(text.into());
+        }
+    });
+}
+
+fn set_voice_list(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_voice_list_text(text.into());
+        }
+    });
+}
+
+fn set_voice_name(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_voice_name(text.into());
+        }
+    });
+}
+
+fn set_last_output(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_last_output_path(text.into());
+        }
+    });
+}
+
+fn set_guide(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_guide_text(text.into());
+        }
+    });
+}
+
+fn set_book_id(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_book_id(text.into());
+        }
+    });
+}
+
+fn set_calibre_ids(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_calibre_ids(text.into());
+        }
+    });
+}
+
+fn set_calibre_preview(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_calibre_preview_text(text.into());
+        }
+    });
+}
+
+fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_audio_cpp_status(text.into());
+        }
+    });
+}

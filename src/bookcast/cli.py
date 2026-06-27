@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 
 from .assembler import assemble_audio
+from . import bridge
 from .calibre import CalibreClient, find_calibredb
 from .characters import suggest_characters
 from .library import BookLibrary, safe_name
 from .llm import OllamaProvider
 from .podcast import PODCAST_MODES, PodcastTurn, generate_interactive_step, generate_podcast_script
-from .tts import WindowsSapiProvider, play_wav
+from .tts import AudioCppProvider, WindowsSapiProvider, play_wav
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,6 +34,11 @@ def main(argv: list[str] | None = None) -> int:
     render_parser.add_argument("--rate", type=int, default=0)
     render_parser.add_argument("--limit", type=int, default=None, help="Render only the first N chunks")
     render_parser.add_argument("--ffmpeg", default="ffmpeg")
+    render_parser.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    render_parser.add_argument("--audio-cpp-exe", default=None)
+    render_parser.add_argument("--audio-cpp-model", default=None)
+    render_parser.add_argument("--audio-cpp-backend", default="cpu")
+    render_parser.add_argument("--audio-cpp-family", default=None)
 
     characters_parser = sub.add_parser("characters", help="LLM-assisted character tools")
     characters_sub = characters_parser.add_subparsers(dest="characters_command", required=True)
@@ -94,7 +100,141 @@ def main(argv: list[str] | None = None) -> int:
     calibre_import.add_argument("--limit", type=int, default=None)
     calibre_import.add_argument("--cleanup-profile", default="standard")
 
+    bridge_parser = sub.add_parser("bridge", help="Machine-readable JSONL bridge for the Rust client")
+    bridge_sub = bridge_parser.add_subparsers(dest="bridge_command", required=True)
+
+    bridge_diagnose = bridge_sub.add_parser("diagnose", help="Emit local tool diagnostics as JSONL")
+    bridge_diagnose.add_argument("--library", type=Path, required=True)
+
+    bridge_voices = bridge_sub.add_parser("voices", help="Emit TTS voices as JSONL")
+    bridge_voices.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_voices.add_argument("--audio-cpp-exe", default=None)
+    bridge_voices.add_argument("--audio-cpp-model", default=None)
+    bridge_voices.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_voices.add_argument("--audio-cpp-family", default=None)
+
+    bridge_list = bridge_sub.add_parser("list", help="Emit imported books as JSONL")
+    bridge_list.add_argument("--library", type=Path, required=True)
+
+    bridge_outputs = bridge_sub.add_parser("outputs", help="Emit rendered outputs as JSONL")
+    bridge_outputs.add_argument("--library", type=Path, required=True)
+    bridge_outputs.add_argument("--book-id", default=None)
+
+    bridge_preview = bridge_sub.add_parser("book-preview", help="Emit book chapters, chunks and text preview as JSONL")
+    bridge_preview.add_argument("book_id")
+    bridge_preview.add_argument("--library", type=Path, required=True)
+    bridge_preview.add_argument("--max-chars", type=int, default=1400)
+
+    bridge_import = bridge_sub.add_parser("import", help="Import a source and emit JSONL job events")
+    bridge_import.add_argument("file", type=Path)
+    bridge_import.add_argument("--library", type=Path, required=True)
+    bridge_import.add_argument("--cleanup-profile", default="standard")
+
+    bridge_calibre = bridge_sub.add_parser("calibre-scan", help="Scan Calibre and emit JSONL results")
+    bridge_calibre.add_argument("calibre_library", type=Path)
+    bridge_calibre.add_argument("--calibredb", default=None)
+    bridge_calibre.add_argument("--limit", type=int, default=None)
+
+    bridge_calibre_import = bridge_sub.add_parser("calibre-import", help="Import Calibre books and emit JSONL results")
+    bridge_calibre_import.add_argument("calibre_library", type=Path)
+    bridge_calibre_import.add_argument("--library", type=Path, required=True)
+    bridge_calibre_import.add_argument("--calibredb", default=None)
+    bridge_calibre_import.add_argument("--id", action="append", dest="ids", default=[])
+    bridge_calibre_import.add_argument("--limit", type=int, default=None)
+    bridge_calibre_import.add_argument("--cleanup-profile", default="standard")
+
+    bridge_render = bridge_sub.add_parser("render", help="Render a book and emit JSONL job events")
+    bridge_render.add_argument("book_id")
+    bridge_render.add_argument("--library", type=Path, required=True)
+    bridge_render.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
+    bridge_render.add_argument("--voice", default=None)
+    bridge_render.add_argument("--rate", type=int, default=0)
+    bridge_render.add_argument("--limit", type=int, default=None)
+    bridge_render.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_render.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_render.add_argument("--audio-cpp-exe", default=None)
+    bridge_render.add_argument("--audio-cpp-model", default=None)
+    bridge_render.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_render.add_argument("--audio-cpp-family", default=None)
+
+    bridge_sample = bridge_sub.add_parser("sample-render", help="Render the first chunk and emit JSONL job events")
+    bridge_sample.add_argument("book_id")
+    bridge_sample.add_argument("--library", type=Path, required=True)
+    bridge_sample.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
+    bridge_sample.add_argument("--voice", default=None)
+    bridge_sample.add_argument("--rate", type=int, default=0)
+    bridge_sample.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_sample.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_sample.add_argument("--audio-cpp-exe", default=None)
+    bridge_sample.add_argument("--audio-cpp-model", default=None)
+    bridge_sample.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_sample.add_argument("--audio-cpp-family", default=None)
+
     args = parser.parse_args(argv)
+    if args.command == "bridge":
+        if args.bridge_command == "diagnose":
+            return bridge.run_safely(bridge.diagnose, args.library)
+        if args.bridge_command == "voices":
+            return bridge.run_safely(
+                bridge.voices,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+            )
+        if args.bridge_command == "list":
+            return bridge.run_safely(bridge.list_books, args.library)
+        if args.bridge_command == "outputs":
+            return bridge.run_safely(bridge.outputs, args.library, args.book_id)
+        if args.bridge_command == "book-preview":
+            return bridge.run_safely(bridge.book_preview, args.library, args.book_id, args.max_chars)
+        if args.bridge_command == "import":
+            return bridge.run_safely(bridge.import_file, args.library, args.file, args.cleanup_profile)
+        if args.bridge_command == "calibre-scan":
+            return bridge.run_safely(bridge.calibre_scan, args.calibre_library, args.calibredb, args.limit)
+        if args.bridge_command == "calibre-import":
+            return bridge.run_safely(
+                bridge.calibre_import,
+                args.library,
+                args.calibre_library,
+                args.ids,
+                args.calibredb,
+                args.limit,
+                args.cleanup_profile,
+            )
+        if args.bridge_command == "render":
+            return bridge.run_safely(
+                bridge.render_book,
+                args.library,
+                args.book_id,
+                args.format,
+                args.voice,
+                args.rate,
+                args.limit,
+                args.ffmpeg,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+            )
+        if args.bridge_command == "sample-render":
+            return bridge.run_safely(
+                bridge.sample_render,
+                args.library,
+                args.book_id,
+                args.format,
+                args.voice,
+                args.rate,
+                args.ffmpeg,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+            )
+
     if args.command == "import":
         library = BookLibrary(args.library)
         try:
@@ -148,9 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "render":
         library = BookLibrary(args.library)
         try:
+            provider = _build_tts_provider(args)
             output = library.render_book(
                 args.book_id,
                 output_format=args.format,
+                provider=provider,
                 voice=args.voice,
                 rate=args.rate,
                 limit=args.limit,
@@ -235,6 +377,21 @@ def _parse_voice_map(entries: list[str]) -> dict[str, str]:
             raise SystemExit(f"Invalid --voice mapping: {entry!r}; expected speaker=voice")
         mapping[speaker] = voice
     return mapping
+
+
+def _build_tts_provider(args) -> WindowsSapiProvider | AudioCppProvider:
+    if getattr(args, "provider", "windows_sapi") == "audio_cpp":
+        if not args.audio_cpp_exe:
+            raise SystemExit("--audio-cpp-exe is required for --provider audio_cpp")
+        if not args.audio_cpp_model:
+            raise SystemExit("--audio-cpp-model is required for --provider audio_cpp")
+        return AudioCppProvider(
+            args.audio_cpp_exe,
+            model=args.audio_cpp_model,
+            backend=args.audio_cpp_backend,
+            family=args.audio_cpp_family,
+        )
+    return WindowsSapiProvider()
 
 
 def _run_interactive_podcast(
