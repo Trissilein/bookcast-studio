@@ -310,6 +310,10 @@ def test_bridge_audio_cpp_health_reports_missing_config(tmp_path: Path, capsys, 
                 "audio.cpp executable is not configured",
                 "audio.cpp model is not configured",
             ],
+            "hints": [
+                "Build audio.cpp, then set audiocpp_cli.exe with Browse in TTS Studio or Settings.",
+                "Choose a compatible local TTS model before using the audio.cpp engine.",
+            ],
         }
     ]
 
@@ -348,6 +352,7 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
     assert events[0]["event"] == "audio_cpp_health"
     assert events[0]["healthy"] is True
     assert events[0]["issues"] == []
+    assert events[0]["hints"] == ["Family is optional; set it only if your audio.cpp model requires --family."]
 
 
 def test_bridge_voices_can_use_piper_provider(capsys, monkeypatch) -> None:

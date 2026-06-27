@@ -77,15 +77,22 @@ def audio_cpp_health(
     audio_cpp_family: str | None = None,
 ) -> int:
     issues: list[str] = []
+    hints: list[str] = []
     audio_cpp_exe = audio_cpp_exe or (str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else None)
     if not audio_cpp_exe:
         issues.append("audio.cpp executable is not configured")
+        hints.append("Build audio.cpp, then set audiocpp_cli.exe with Browse in TTS Studio or Settings.")
     elif not Path(audio_cpp_exe).exists() and shutil.which(audio_cpp_exe) is None:
         issues.append(f"audio.cpp executable not found: {audio_cpp_exe}")
+        hints.append("Use Browse to point to the built audiocpp_cli.exe, or rebuild audio.cpp.")
     if not audio_cpp_model:
         issues.append("audio.cpp model is not configured")
+        hints.append("Choose a compatible local TTS model before using the audio.cpp engine.")
     elif any(marker in audio_cpp_model for marker in ("\\", "/", ":")) and not Path(audio_cpp_model).exists():
         issues.append(f"audio.cpp model path not found: {audio_cpp_model}")
+        hints.append("Use Browse to choose an existing model file, or pass a valid model name if audio.cpp supports it.")
+    if audio_cpp_model and not audio_cpp_family:
+        hints.append("Family is optional; set it only if your audio.cpp model requires --family.")
 
     healthy = False
     if not issues:
@@ -107,6 +114,7 @@ def audio_cpp_health(
         backend=audio_cpp_backend,
         family=audio_cpp_family or "",
         issues=issues,
+        hints=hints,
     )
     return 0 if healthy else 1
 

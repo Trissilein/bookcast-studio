@@ -2164,15 +2164,25 @@ fn handle_bridge_events(
                             .join("; ")
                     })
                     .unwrap_or_default();
+                let hints = json_string_list(&value, "hints");
                 if healthy {
                     set_audio_status(
                         weak.clone(),
                         &format!("audio.cpp: local config OK ({executable})"),
                     );
-                    set_guide(
-                        weak.clone(),
-                        "audio.cpp local health OK. Render sample next.",
-                    );
+                    if hints.is_empty() {
+                        set_guide(
+                            weak.clone(),
+                            "audio.cpp local health OK. Render sample next.",
+                        );
+                    } else {
+                        set_guide(
+                            weak.clone(),
+                            &format!(
+                                "audio.cpp local health OK. Render sample next.\n\nHints:\n{hints}"
+                            ),
+                        );
+                    }
                 } else {
                     let detail = if issues.is_empty() {
                         "audio.cpp local config failed".to_string()
@@ -2180,7 +2190,14 @@ fn handle_bridge_events(
                         issues
                     };
                     set_audio_status(weak.clone(), &format!("audio.cpp: {detail}"));
-                    set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
+                    if hints.is_empty() {
+                        set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
+                    } else {
+                        set_guide(
+                            weak.clone(),
+                            &format!("Fix audio.cpp config: {detail}\n\nHints:\n{hints}"),
+                        );
+                    }
                 }
             }
             Some("cleanup_profiles") => {

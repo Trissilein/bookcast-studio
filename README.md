@@ -133,7 +133,8 @@ Rendering through `audio.cpp` requires a model path/name and usually a family
 name. The provider calls `audiocpp_cli --task tts --mode offline`; a voice value
 that points to an existing WAV file is passed as `--voice-ref`, otherwise it is
 passed as `--speaker`. Use `Check audio.cpp` in the Rust workbench to validate
-both the upstream pin and the local executable/model configuration.
+both the upstream pin and the local executable/model configuration. Health
+checks return setup hints for missing executable/model paths and optional family.
 
 ## Import From Calibre
 
