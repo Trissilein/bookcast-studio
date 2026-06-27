@@ -158,6 +158,13 @@ def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypat
 
     assert result == 0
     assert sample_events[0]["event"] == "job_started"
+    assert any(
+        event.get("event") == "job_progress"
+        and event.get("phase") == "tts"
+        and event.get("chunk") == event.get("total")
+        for event in sample_events
+    )
+    assert any(event.get("event") == "job_progress" and event.get("phase") == "assemble" for event in sample_events)
     assert sample_events[-1]["event"] == "job_done"
     assert sample_events[-1]["output"]
 
@@ -387,6 +394,13 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     render_events = _events(capsys.readouterr().out)
 
     assert result == 0
-    assert render_events[2]["event"] == "podcast_script"
+    rendered_script_events = [event for event in render_events if event.get("event") == "podcast_script"]
+    assert rendered_script_events
+    assert any(
+        event.get("event") == "job_progress"
+        and event.get("job") == "podcast_render"
+        and event.get("phase") == "tts"
+        for event in render_events
+    )
     assert render_events[-1]["event"] == "job_done"
     assert render_events[-1]["output"].endswith(".opus")

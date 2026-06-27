@@ -52,11 +52,17 @@ def test_render_book_marks_chunks_and_outputs(tmp_path: Path, monkeypatch) -> No
         return output_path
 
     monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    progress: list[dict[str, object]] = []
 
     library = BookLibrary(library_root)
     try:
         book_id = library.import_source(source)
-        output = library.render_book(book_id, provider=_FakeTtsProvider(), output_format="opus")
+        output = library.render_book(
+            book_id,
+            provider=_FakeTtsProvider(),
+            output_format="opus",
+            progress_callback=progress.append,
+        )
         chunks = library.get_chunks(book_id)
     finally:
         library.close()
@@ -64,6 +70,9 @@ def test_render_book_marks_chunks_and_outputs(tmp_path: Path, monkeypatch) -> No
     assert output.exists()
     assert all(chunk["status"] == "Rendered" for chunk in chunks)
     assert all(Path(chunk["audio_path"]).exists() for chunk in chunks)
+    assert progress[0] == {"phase": "tts", "progress": 10, "chunk": 0, "total": len(chunks)}
+    assert progress[-1] == {"phase": "assemble", "progress": 92, "chunk": len(chunks), "total": len(chunks)}
+    assert any(event.get("phase") == "tts" and event.get("chunk") == len(chunks) for event in progress)
 
 
 def test_render_book_cache_key_includes_voice(tmp_path: Path, monkeypatch) -> None:

@@ -248,6 +248,7 @@ def podcast_render(
             voice_map=_parse_voice_entries(voice_entries or []),
             ffmpeg=ffmpeg,
             rate=rate,
+            progress_callback=lambda payload: emit("job_progress", job="podcast_render", **payload),
         )
     finally:
         library.close()
@@ -386,6 +387,7 @@ def render_book(
             rate=rate,
             limit=limit,
             ffmpeg=ffmpeg,
+            progress_callback=lambda payload: emit("job_progress", job="render", **payload),
         )
         emit("job_progress", job="render", progress=100)
         emit("job_done", job="render", output=str(output))

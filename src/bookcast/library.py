@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,8 @@ from .models import Chapter, Document, Metadata
 from .podcast import PodcastScript, PodcastTurn
 from .text_pipeline import chunk_chapters, clean_text
 from .tts import TtsProvider, WindowsSapiProvider
+
+ProgressCallback = Callable[[dict[str, object]], None]
 
 
 class BookLibrary:
@@ -530,6 +533,7 @@ class BookLibrary:
         rate: int = 0,
         ffmpeg: str = "ffmpeg",
         limit: int | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> Path:
         book = self.get_book(book_id)
         if not book:
@@ -550,21 +554,39 @@ class BookLibrary:
         render_key = safe_name(f"{provider.id}_{voice or 'default'}_rate{rate}")[:80]
         rendered: list[Path] = []
         rendered_meta: list[tuple[int, Path]] = []
-        for chunk in chunks:
+        total = len(chunks)
+        if progress_callback:
+            progress_callback({"phase": "tts", "progress": 10, "chunk": 0, "total": total})
+        for index, chunk in enumerate(chunks, start=1):
             out_wav = chunk_dir / (
                 f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_"
                 f"{chunk['text_hash'][:12]}_{render_key}.wav"
             )
-            if not out_wav.exists() or out_wav.stat().st_size == 0:
+            cached = out_wav.exists() and out_wav.stat().st_size > 0
+            if not cached:
                 provider.synthesize(str(chunk["text"]), out_wav, voice=voice, rate=rate)
                 self._mark_chunk_rendered(str(chunk["id"]), out_wav)
             rendered.append(out_wav)
             rendered_meta.append((int(chunk["chapter_index"]), out_wav))
+            if progress_callback:
+                progress_callback(
+                    {
+                        "phase": "tts",
+                        "progress": 10 + int(index / total * 75),
+                        "chunk": index,
+                        "total": total,
+                        "cached": cached,
+                        "chapter_index": int(chunk["chapter_index"]),
+                        "chunk_index": int(chunk["chunk_index"]),
+                    }
+                )
 
         output_dir = self.root / "books" / book_id / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         output_name = f"{safe_name(str(book['author']))} - {safe_name(str(book['title']))}.{output_format.lower()}"
         output_path = output_dir / output_name
+        if progress_callback:
+            progress_callback({"phase": "assemble", "progress": 92, "chunk": total, "total": total})
         timeline = chapter_timeline(rendered_meta, chapter_titles) if output_format.lower() == "m4b" else None
         assemble_kwargs = {"ffmpeg": ffmpeg}
         if timeline is not None:
@@ -583,6 +605,7 @@ class BookLibrary:
         voice_map: dict[str, str] | None = None,
         ffmpeg: str = "ffmpeg",
         rate: int = 0,
+        progress_callback: ProgressCallback | None = None,
     ) -> Path:
         book = self.get_book(book_id)
         if not book:
@@ -609,17 +632,34 @@ class BookLibrary:
         rendered: list[Path] = []
         elapsed = 0.0
         chapter_marks: list[tuple[str, float]] = []
+        total = len(script.turns)
+        if progress_callback:
+            progress_callback({"phase": "tts", "progress": 10, "chunk": 0, "total": total})
         for index, turn in enumerate(script.turns):
             voice_name = voice_by_speaker.get(turn.speaker) or default_voice
             render_key = safe_name(f"{provider.id}_{voice_name or 'default'}_rate{rate}")[:80]
             out_wav = chunk_dir / f"t{index:04d}_{safe_name(turn.speaker)}_{render_key}.wav"
-            if not out_wav.exists() or out_wav.stat().st_size == 0:
+            cached = out_wav.exists() and out_wav.stat().st_size > 0
+            if not cached:
                 provider.synthesize(turn.text, out_wav, voice=voice_name, rate=rate)
             rendered.append(out_wav)
             chapter_marks.append((turn.speaker, elapsed))
             elapsed += probe_duration(out_wav)
+            if progress_callback:
+                progress_callback(
+                    {
+                        "phase": "tts",
+                        "progress": 10 + int((index + 1) / total * 75),
+                        "chunk": index + 1,
+                        "total": total,
+                        "cached": cached,
+                        "speaker": turn.speaker,
+                    }
+                )
 
         output_path = podcast_dir / f"{safe_name(script.title)}.{output_format.lower()}"
+        if progress_callback:
+            progress_callback({"phase": "assemble", "progress": 92, "chunk": total, "total": total})
         timeline = chapter_marks if output_format.lower() == "m4b" else None
         assemble_kwargs = {"ffmpeg": ffmpeg}
         if timeline is not None:

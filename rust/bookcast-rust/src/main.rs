@@ -1522,6 +1522,27 @@ fn json_string_list(value: &Value, key: &str) -> String {
         .unwrap_or_default()
 }
 
+fn job_progress_detail(value: &Value) -> String {
+    if let Some(phase) = value.get("phase").and_then(Value::as_str) {
+        let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
+        let total = value.get("total").and_then(Value::as_u64).unwrap_or(0);
+        let cached = value
+            .get("cached")
+            .and_then(Value::as_bool)
+            .map(|is_cached| if is_cached { " cached" } else { " rendered" })
+            .unwrap_or("");
+        if total > 0 {
+            return format!("{phase} {chunk}/{total}{cached}");
+        }
+        return phase.to_string();
+    }
+    value
+        .get("chunks")
+        .and_then(Value::as_i64)
+        .map(|chunks| format!("{chunks} chunks"))
+        .unwrap_or_else(|| "Progress update".to_string())
+}
+
 fn handle_bridge_events(
     weak: slint::Weak<AppWindow>,
     jobs: Arc<Mutex<Vec<JobState>>>,
@@ -1550,11 +1571,7 @@ fn handle_bridge_events(
                     .and_then(Value::as_u64)
                     .unwrap_or(50)
                     .min(100) as u8;
-                let detail = value
-                    .get("chunks")
-                    .and_then(Value::as_i64)
-                    .map(|chunks| format!("{chunks} chunks"))
-                    .unwrap_or_else(|| "Progress update".to_string());
+                let detail = job_progress_detail(&value);
                 update_job(
                     weak.clone(),
                     jobs.clone(),
@@ -2135,6 +2152,9 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
+    use super::job_progress_detail;
     use super::render_preflight_problem_from;
 
     #[test]
@@ -2167,6 +2187,14 @@ mod tests {
         assert_eq!(
             render_preflight_problem_from("book-1", "m4b", 1, "piper.exe", "", ""),
             None
+        );
+    }
+
+    #[test]
+    fn job_progress_detail_uses_phase_and_counter() {
+        assert_eq!(
+            job_progress_detail(&json!({"phase":"tts","chunk":2,"total":5,"cached":false})),
+            "tts 2/5 rendered"
         );
     }
 }
