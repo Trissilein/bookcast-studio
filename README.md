@@ -56,6 +56,9 @@ back to TTS Studio, reducing manual book-id copy/paste after file or Calibre imp
 preview, so reopening a library lands on a renderable book faster.
 Output history is shown in TTS Studio, Library, and Podcast views; renders emit
 fresh output lists automatically and `Refresh Outputs` reloads them on demand.
+TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
+shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
+configuration.
 
 Python fallback UI:
 

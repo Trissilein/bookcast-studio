@@ -189,15 +189,23 @@ export component AppWindow inherits Window {
                                 wrap: word-wrap;
                             }
 
-                            Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.audio-cpp-exe; }
-                            Text { text: "Piper executable"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.piper-exe; }
-                            Text { text: "Piper voices folder"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.piper-voice-dir; }
-                            Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.audio-cpp-model; }
+                            Text {
+                                visible: root.engine-index == 0;
+                                text: "Windows SAPI uses installed Windows voices. No engine path needed.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text { visible: root.engine-index == 1; text: "Piper executable"; color: rgb(89, 99, 93); }
+                            LineEdit { visible: root.engine-index == 1; text <=> root.piper-exe; }
+                            Text { visible: root.engine-index == 1; text: "Piper voices folder"; color: rgb(89, 99, 93); }
+                            LineEdit { visible: root.engine-index == 1; text <=> root.piper-voice-dir; }
+                            Text { visible: root.engine-index == 2; text: "audio.cpp executable"; color: rgb(89, 99, 93); }
+                            LineEdit { visible: root.engine-index == 2; text <=> root.audio-cpp-exe; }
+                            Text { visible: root.engine-index == 2; text: "audio.cpp model"; color: rgb(89, 99, 93); }
+                            LineEdit { visible: root.engine-index == 2; text <=> root.audio-cpp-model; }
                             HorizontalLayout {
+                                visible: root.engine-index == 2;
                                 spacing: 10px;
                                 VerticalLayout {
                                     Text { text: "Backend"; color: rgb(89, 99, 93); }
