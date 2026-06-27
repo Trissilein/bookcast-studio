@@ -73,6 +73,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast render <book-id> --library .\library --format m4b
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
 .\.venv\Scripts\bookcast bridge voices
+.\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-exe D:\path\to\audiocpp_cli.exe --audio-cpp-model D:\path\to\model
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
@@ -89,6 +90,8 @@ Fast smoke without packaging:
 BookCast treats `audio.cpp` as an external process. The Rust workbench can check
 the pinned upstream revision and shows `Update Available` if GitHub HEAD differs.
 Rendering through `audio.cpp` requires the CLI executable and model path/name.
+Use `Check audio.cpp` in the Rust workbench to validate both the upstream pin and
+the local executable/model configuration.
 
 ## Import From Calibre
 

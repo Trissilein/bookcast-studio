@@ -165,6 +165,63 @@ def test_bridge_voices_emit_provider_voices(capsys, monkeypatch) -> None:
     ]
 
 
+def test_bridge_audio_cpp_health_reports_missing_config(capsys) -> None:
+    result = main(["bridge", "audio-cpp-health"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert events == [
+        {
+            "event": "audio_cpp_health",
+            "healthy": False,
+            "executable": "",
+            "model": "",
+            "backend": "cpu",
+            "family": "",
+            "issues": [
+                "audio.cpp executable is not configured",
+                "audio.cpp model is not configured",
+            ],
+        }
+    ]
+
+
+def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys, monkeypatch) -> None:
+    exe = tmp_path / "audio-cpp.exe"
+    model = tmp_path / "model.gguf"
+    exe.write_text("fake", encoding="utf-8")
+    model.write_text("fake", encoding="utf-8")
+
+    class FakeAudioCppProvider:
+        def __init__(self, executable: str, model: str, backend: str = "cpu", family: str | None = None) -> None:
+            self.executable = executable
+            self.model = model
+            self.backend = backend
+            self.family = family
+
+        def health(self) -> bool:
+            return True
+
+    monkeypatch.setattr("bookcast.bridge.AudioCppProvider", FakeAudioCppProvider)
+
+    result = main(
+        [
+            "bridge",
+            "audio-cpp-health",
+            "--audio-cpp-exe",
+            str(exe),
+            "--audio-cpp-model",
+            str(model),
+        ]
+    )
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert events[0]["event"] == "audio_cpp_health"
+    assert events[0]["healthy"] is True
+    assert events[0]["issues"] == []
+
+
 def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Character Book.txt"

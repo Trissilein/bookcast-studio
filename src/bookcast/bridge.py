@@ -53,6 +53,46 @@ def voices(
     return 0
 
 
+def audio_cpp_health(
+    audio_cpp_exe: str | None = None,
+    audio_cpp_model: str | None = None,
+    audio_cpp_backend: str = "cpu",
+    audio_cpp_family: str | None = None,
+) -> int:
+    issues: list[str] = []
+    if not audio_cpp_exe:
+        issues.append("audio.cpp executable is not configured")
+    elif not Path(audio_cpp_exe).exists() and shutil.which(audio_cpp_exe) is None:
+        issues.append(f"audio.cpp executable not found: {audio_cpp_exe}")
+    if not audio_cpp_model:
+        issues.append("audio.cpp model is not configured")
+    elif any(marker in audio_cpp_model for marker in ("\\", "/", ":")) and not Path(audio_cpp_model).exists():
+        issues.append(f"audio.cpp model path not found: {audio_cpp_model}")
+
+    healthy = False
+    if not issues:
+        provider = AudioCppProvider(
+            str(audio_cpp_exe),
+            model=str(audio_cpp_model),
+            backend=audio_cpp_backend,
+            family=audio_cpp_family,
+        )
+        healthy = provider.health()
+        if not healthy:
+            issues.append("audio.cpp --help failed")
+
+    emit(
+        "audio_cpp_health",
+        healthy=healthy,
+        executable=audio_cpp_exe or "",
+        model=audio_cpp_model or "",
+        backend=audio_cpp_backend,
+        family=audio_cpp_family or "",
+        issues=issues,
+    )
+    return 0 if healthy else 1
+
+
 def list_books(library_root: Path) -> int:
     library = BookLibrary(library_root)
     try:

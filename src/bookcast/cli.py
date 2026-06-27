@@ -113,6 +113,12 @@ def main(argv: list[str] | None = None) -> int:
     bridge_voices.add_argument("--audio-cpp-backend", default="cpu")
     bridge_voices.add_argument("--audio-cpp-family", default=None)
 
+    bridge_audio_cpp = bridge_sub.add_parser("audio-cpp-health", help="Validate local audio.cpp configuration")
+    bridge_audio_cpp.add_argument("--audio-cpp-exe", default=None)
+    bridge_audio_cpp.add_argument("--audio-cpp-model", default=None)
+    bridge_audio_cpp.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_audio_cpp.add_argument("--audio-cpp-family", default=None)
+
     bridge_list = bridge_sub.add_parser("list", help="Emit imported books as JSONL")
     bridge_list.add_argument("--library", type=Path, required=True)
 
@@ -207,6 +213,14 @@ def main(argv: list[str] | None = None) -> int:
             return bridge.run_safely(
                 bridge.voices,
                 args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+            )
+        if args.bridge_command == "audio-cpp-health":
+            return bridge.run_safely(
+                bridge.audio_cpp_health,
                 args.audio_cpp_exe,
                 args.audio_cpp_model,
                 args.audio_cpp_backend,

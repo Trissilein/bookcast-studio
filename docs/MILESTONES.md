@@ -59,6 +59,7 @@
 - Add queue log, cancel hook, diagnostics, import controls, TTS engine selection. Done.
 - Add configurable `audio.cpp` external-process TTS provider. Done.
 - Add `audio.cpp` upstream check with `Update Available` flag. Done.
+- Add local `audio.cpp` executable/model health diagnostics. Done.
 - Replace queue log with structured job rows. Done.
 - Add Calibre scan preview and ID-based import in Rust workbench. Done.
 - Add source/chapter preview panes and render sample before full queue. Done.
@@ -66,4 +67,4 @@
 - Persist Rust UI settings and add structured views instead of one-page workbench. Done.
 - Add Rust views for character suggestions and static podcast generation. Done.
 - Add a real build/package command and a final end-to-end acceptance script. Done.
-- Next: validate real `audio.cpp` CLI arguments against an installed binary/model and polish visual design.
+- Next: install or build a real `audio.cpp` binary/model, validate exact CLI arguments, and polish visual design.

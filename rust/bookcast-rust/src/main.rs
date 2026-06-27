@@ -743,7 +743,16 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
 
     let weak = app.as_weak();
     let refresh_state = state.clone();
+    let health_state = state.clone();
     app.on_refresh_audio_cpp(move || {
+        if let Some(app) = weak.upgrade() {
+            run_bridge(
+                app.as_weak(),
+                health_state.clone(),
+                "audio.cpp health",
+                audio_cpp_health_args(&app),
+            );
+        }
         refresh_audio_cpp(weak.clone(), refresh_state.repo_root.clone());
     });
 
@@ -1213,6 +1222,27 @@ fn voice_args(app: &AppWindow) -> Vec<String> {
     args
 }
 
+fn audio_cpp_health_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec!["bridge".into(), "audio-cpp-health".into()];
+    args.extend([
+        "--audio-cpp-exe".into(),
+        app.get_audio_cpp_exe().to_string(),
+    ]);
+    args.extend([
+        "--audio-cpp-model".into(),
+        app.get_audio_cpp_model().to_string(),
+    ]);
+    args.extend([
+        "--audio-cpp-backend".into(),
+        app.get_audio_cpp_backend().to_string(),
+    ]);
+    let family = app.get_audio_cpp_family().to_string();
+    if !family.trim().is_empty() {
+        args.extend(["--audio-cpp-family".into(), family]);
+    }
+    args
+}
+
 fn create_job(
     weak: slint::Weak<AppWindow>,
     jobs: Arc<Mutex<Vec<JobState>>>,
@@ -1410,6 +1440,39 @@ fn handle_bridge_events(
                     weak.clone(),
                     "Voices loaded. Voice field was filled with the first voice.",
                 );
+            }
+            Some("audio_cpp_health") => {
+                let healthy = value.get("healthy").and_then(Value::as_bool).unwrap_or(false);
+                let executable = value
+                    .get("executable")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let issues = value
+                    .get("issues")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    })
+                    .unwrap_or_default();
+                if healthy {
+                    set_audio_status(
+                        weak.clone(),
+                        &format!("audio.cpp: local config OK ({executable})"),
+                    );
+                    set_guide(weak.clone(), "audio.cpp local health OK. Render sample next.");
+                } else {
+                    let detail = if issues.is_empty() {
+                        "audio.cpp local config failed".to_string()
+                    } else {
+                        issues
+                    };
+                    set_audio_status(weak.clone(), &format!("audio.cpp: {detail}"));
+                    set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
+                }
             }
             Some("outputs") => {
                 if let Some(path) = value
