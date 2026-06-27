@@ -126,6 +126,8 @@ files into its own library. It does not write back to Calibre.
 The Rust Import Wizard diagnoses wrong folders, missing `metadata.db`, missing
 `calibredb`, and locked/unreadable libraries before scanning.
 It exposes this as an explicit `Diagnose Calibre` step before `Scan Calibre`.
+Local import accepts either a single supported file or a folder; folder import
+recursively imports TXT, MD, EPUB, DOCX, and PDF files while skipping unrelated files.
 
 ```powershell
 .\.venv\Scripts\bookcast calibre scan "C:\Users\you\Calibre Library"

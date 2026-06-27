@@ -253,8 +253,8 @@ export component AppWindow inherits Window {
                             spacing: 12px;
 
                             Text { text: "Import Wizard"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
-                            Text { text: "Step 1: import a local TXT, MD, EPUB, DOCX, or PDF file."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
-                            Text { text: "Source file"; color: rgb(89, 99, 93); }
+                            Text { text: "Step 1: import a local TXT, MD, EPUB, DOCX, or PDF file, or a folder containing them."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            Text { text: "Source file or folder"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.source-path; }
                             Button { text: "Import Source"; clicked => { root.import-source(); } }
 

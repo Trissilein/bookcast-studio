@@ -21,10 +21,16 @@ def test_bridge_import_and_list_emit_jsonl(tmp_path: Path, capsys) -> None:
     import_events = _events(capsys.readouterr().out)
 
     assert result == 0
-    assert [event["event"] for event in import_events] == ["job_started", "job_progress", "job_done", "book_preview"]
-    assert import_events[2]["book_id"]
-    assert import_events[3]["book"]["title"] == "Bridge Book"
-    assert import_events[3]["chunk_count"] >= 1
+    assert [event["event"] for event in import_events] == [
+        "job_started",
+        "source_imported",
+        "job_progress",
+        "job_done",
+        "book_preview",
+    ]
+    assert import_events[3]["book_id"]
+    assert import_events[4]["book"]["title"] == "Bridge Book"
+    assert import_events[4]["chunk_count"] >= 1
 
     result = main(["bridge", "list", "--library", str(library_root)])
     list_events = _events(capsys.readouterr().out)
@@ -39,6 +45,23 @@ def test_bridge_import_and_list_emit_jsonl(tmp_path: Path, capsys) -> None:
     assert result == 0
     assert [event["event"] for event in preview_events] == ["books", "book_preview"]
     assert preview_events[1]["book"]["title"] == "Bridge Book"
+
+
+def test_bridge_import_folder_imports_supported_files(tmp_path: Path, capsys) -> None:
+    library_root = tmp_path / "library"
+    source_dir = tmp_path / "sources"
+    source_dir.mkdir()
+    (source_dir / "Ada Author - First Book.txt").write_text("First body.", encoding="utf-8")
+    (source_dir / "Bea Author - Second Book.md").write_text("# Second\n\nSecond body.", encoding="utf-8")
+    (source_dir / "skip.jpg").write_bytes(b"not a book")
+
+    result = main(["bridge", "import", str(source_dir), "--library", str(library_root)])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in events].count("source_imported") == 2
+    assert events[-2]["count"] == 2
+    assert events[-1]["event"] == "book_preview"
 
 
 def test_bridge_errors_are_structured(tmp_path: Path, capsys) -> None:

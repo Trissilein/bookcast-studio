@@ -8,6 +8,7 @@ from typing import Any
 
 from .calibre import CalibreClient, diagnose_calibre_library, find_calibredb
 from .characters import suggest_characters as generate_character_suggestions
+from .importers import SUPPORTED_EXTENSIONS
 from .library import BookLibrary
 from .llm import OllamaProvider
 from .podcast import generate_podcast_script
@@ -244,11 +245,18 @@ def import_file(library_root: Path, source: Path, cleanup_profile: str = "standa
     emit("job_started", job="import", source=str(source))
     library = BookLibrary(library_root)
     try:
-        book_id = library.import_source(source, cleanup_profile=cleanup_profile)
-        book = library.get_book(book_id)
-        emit("job_progress", job="import", progress=100)
-        emit("job_done", job="import", book_id=book_id, book=book)
-        emit("book_preview", **_book_preview_payload(library, book_id))
+        sources = _source_files(source)
+        imported: list[dict[str, object]] = []
+        total = len(sources)
+        for index, path in enumerate(sources, start=1):
+            book_id = library.import_source(path, cleanup_profile=cleanup_profile)
+            book = library.get_book(book_id)
+            imported.append({"book_id": book_id, "book": book, "source": str(path)})
+            emit("source_imported", book_id=book_id, book=book, source=str(path))
+            emit("job_progress", job="import", progress=int(index / total * 100), imported=index, total=total)
+        first = imported[0]
+        emit("job_done", job="import", book_id=first["book_id"], book=first["book"], count=len(imported), imported=imported)
+        emit("book_preview", **_book_preview_payload(library, str(first["book_id"])))
     finally:
         library.close()
     return 0
@@ -485,6 +493,20 @@ def _book_preview_payload(library: BookLibrary, book_id: str, max_chars: int = 1
         "first_chunk": chunks[0] if chunks else None,
         "preview": "\n\n".join(preview_parts)[:max_chars],
     }
+
+
+def _source_files(source: Path) -> list[Path]:
+    source = Path(source)
+    if source.is_dir():
+        files = sorted(
+            path
+            for path in source.rglob("*")
+            if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+        )
+        if not files:
+            raise ValueError(f"No supported source files found in folder: {source}")
+        return files
+    return [source]
 
 
 def _parse_voice_entries(entries: list[str]) -> dict[str, str]:
