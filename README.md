@@ -65,6 +65,8 @@ Path fields for library, imports, Calibre, Piper, and `audio.cpp` have native
 Browse buttons so first setup does not depend on manual Windows path typing.
 After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
+The Import Wizard uses the selected cleanup profile for both local and Calibre
+imports, so chunking can be chosen before text enters the library.
 
 Python fallback UI:
 

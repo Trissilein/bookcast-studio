@@ -311,6 +311,12 @@ export component AppWindow inherits Window {
                                 Button { text: "File"; clicked => { root.browse-source-file(); } }
                                 Button { text: "Folder"; clicked => { root.browse-source-folder(); } }
                             }
+                            Text { text: "Cleanup profile for import"; color: rgb(89, 99, 93); }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.cleanup-profile-name; }
+                                Button { text: "Load Profiles"; clicked => { root.load-cleanup-profiles(); } }
+                            }
                             Button { text: "Import Source"; clicked => { root.import-source(); } }
 
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
@@ -817,18 +823,18 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text("Import needs a source path.".into());
             return;
         }
-        run_bridge(
-            app.as_weak(),
-            import_state.clone(),
-            "import",
-            vec![
-                "bridge".into(),
-                "import".into(),
-                source,
-                "--library".into(),
-                library,
-            ],
-        );
+        let mut args = vec![
+            "bridge".into(),
+            "import".into(),
+            source,
+            "--library".into(),
+            library,
+        ];
+        let profile = app.get_cleanup_profile_name().to_string();
+        if !profile.trim().is_empty() {
+            args.extend(["--cleanup-profile".into(), profile]);
+        }
+        run_bridge(app.as_weak(), import_state.clone(), "import", args);
     });
 
     let weak = app.as_weak();
@@ -883,6 +889,10 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         ];
         for id in split_ids(&app.get_calibre_ids().to_string()) {
             args.extend(["--id".into(), id]);
+        }
+        let profile = app.get_cleanup_profile_name().to_string();
+        if !profile.trim().is_empty() {
+            args.extend(["--cleanup-profile".into(), profile]);
         }
         run_bridge(
             app.as_weak(),
