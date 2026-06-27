@@ -165,7 +165,9 @@ def test_bridge_voices_emit_provider_voices(capsys, monkeypatch) -> None:
     ]
 
 
-def test_bridge_audio_cpp_health_reports_missing_config(capsys) -> None:
+def test_bridge_audio_cpp_health_reports_missing_config(tmp_path: Path, capsys, monkeypatch) -> None:
+    monkeypatch.setattr("bookcast.bridge.DEFAULT_AUDIO_CPP_EXE", tmp_path / "missing.exe")
+
     result = main(["bridge", "audio-cpp-health"])
     events = _events(capsys.readouterr().out)
 

@@ -11,7 +11,7 @@ Current slice:
 - CLI import smoke command.
 - TXT, MD, EPUB, DOCX, and PDF import.
 - Read-only Calibre library import via `calibredb`.
-- Windows SAPI and configurable `audio.cpp` TTS chunk rendering.
+- Windows SAPI and configurable `audio.cpp` TTS chunk rendering through `audiocpp_cli`.
 - Piper local TTS via the existing Trispr-Flow Piper binary/voices when present.
 - ffmpeg assembly to Opus, MP3, WAV, or M4B.
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
@@ -75,7 +75,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
 .\.venv\Scripts\bookcast bridge voices
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
-.\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-exe D:\path\to\audiocpp_cli.exe --audio-cpp-model D:\path\to\model
+.\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
@@ -85,16 +85,24 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>
 .\.venv\Scripts\bookcast bridge calibre-scan "C:\Users\you\Calibre Library"
 .\.venv\Scripts\bookcast bridge calibre-import "C:\Users\you\Calibre Library" --library .\library --id 42
-.\.venv\Scripts\bookcast bridge render <book-id> --library .\library --provider audio_cpp --audio-cpp-exe D:\path\to\audiocpp_cli.exe --audio-cpp-model D:\path\to\model
+.\.venv\Scripts\bookcast bridge render <book-id> --library .\library --provider audio_cpp --audio-cpp-model D:\path\to\model --audio-cpp-family <family>
 ```
 
 ## audio.cpp
 
 BookCast treats `audio.cpp` as an external process. The Rust workbench can check
 the pinned upstream revision and shows `Update Available` if GitHub HEAD differs.
-Rendering through `audio.cpp` requires the CLI executable and model path/name.
-Use `Check audio.cpp` in the Rust workbench to validate both the upstream pin and
-the local executable/model configuration.
+The default Windows CLI path is:
+
+```powershell
+D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe
+```
+
+Rendering through `audio.cpp` requires a model path/name and usually a family
+name. The provider calls `audiocpp_cli --task tts --mode offline`; a voice value
+that points to an existing WAV file is passed as `--voice-ref`, otherwise it is
+passed as `--speaker`. Use `Check audio.cpp` in the Rust workbench to validate
+both the upstream pin and the local executable/model configuration.
 
 ## Import From Calibre
 

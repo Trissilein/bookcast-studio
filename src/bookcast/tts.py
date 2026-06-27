@@ -146,6 +146,8 @@ class AudioCppProvider(TtsProvider):
             self.model,
             "--backend",
             self.backend,
+            "--mode",
+            "offline",
             "--text",
             text,
             "--out",
@@ -153,10 +155,15 @@ class AudioCppProvider(TtsProvider):
         ]
         if self.family:
             args.extend(["--family", self.family])
-        if voice:
-            args.extend(["--voice", voice])
+        if voice and voice != "default":
+            voice_path = Path(voice)
+            if voice_path.exists():
+                args.extend(["--voice-ref", str(voice_path)])
+            else:
+                args.extend(["--speaker", voice])
         if rate:
-            args.extend(["--rate", str(rate)])
+            speaking_rate = max(0.5, min(2.0, 1.0 + (rate * 0.05)))
+            args.extend(["--speaking-rate", f"{speaking_rate:.2f}"])
         proc = subprocess.run(args, check=False, capture_output=True, text=True)
         if proc.returncode != 0:
             detail = proc.stderr.strip() or proc.stdout.strip()

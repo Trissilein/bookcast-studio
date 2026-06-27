@@ -461,6 +461,7 @@ const AUDIO_CPP_REMOTE: &str = "https://github.com/0xShug0/audio.cpp";
 const AUDIO_CPP_PINNED: &str = include_str!("../audio_cpp.lock");
 const DEFAULT_PIPER_EXE: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe";
 const DEFAULT_PIPER_VOICE_DIR: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices";
+const DEFAULT_AUDIO_CPP_EXE: &str = r"D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe";
 
 #[derive(Clone)]
 struct AppState {
@@ -516,6 +517,9 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     if Path::new(DEFAULT_PIPER_VOICE_DIR).exists() {
         app.set_piper_voice_dir(DEFAULT_PIPER_VOICE_DIR.into());
+    }
+    if Path::new(DEFAULT_AUDIO_CPP_EXE).exists() {
+        app.set_audio_cpp_exe(DEFAULT_AUDIO_CPP_EXE.into());
     }
     app.set_guide_text("Run Diagnose. If ffmpeg and TTS are ready, import a file or scan Calibre. Render jobs go through the queue and can be cancelled.".into());
     load_settings(&app, &state.repo_root);
@@ -1051,7 +1055,9 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_output_format(settings.output_format.into());
     }
     app.set_last_output_path(settings.last_output_path.into());
-    app.set_audio_cpp_exe(settings.audio_cpp_exe.into());
+    if !settings.audio_cpp_exe.is_empty() {
+        app.set_audio_cpp_exe(settings.audio_cpp_exe.into());
+    }
     app.set_audio_cpp_model(settings.audio_cpp_model.into());
     if !settings.audio_cpp_backend.is_empty() {
         app.set_audio_cpp_backend(settings.audio_cpp_backend.into());

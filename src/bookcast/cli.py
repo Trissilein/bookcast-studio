@@ -480,12 +480,15 @@ def _parse_voice_map(entries: list[str]) -> dict[str, str]:
 
 def _build_tts_provider(args) -> WindowsSapiProvider | AudioCppProvider | PiperProvider:
     if getattr(args, "provider", "windows_sapi") == "audio_cpp":
-        if not args.audio_cpp_exe:
+        audio_cpp_exe = args.audio_cpp_exe or (
+            str(bridge.DEFAULT_AUDIO_CPP_EXE) if bridge.DEFAULT_AUDIO_CPP_EXE.exists() else None
+        )
+        if not audio_cpp_exe:
             raise SystemExit("--audio-cpp-exe is required for --provider audio_cpp")
         if not args.audio_cpp_model:
             raise SystemExit("--audio-cpp-model is required for --provider audio_cpp")
         return AudioCppProvider(
-            args.audio_cpp_exe,
+            audio_cpp_exe,
             model=args.audio_cpp_model,
             backend=args.audio_cpp_backend,
             family=args.audio_cpp_family,

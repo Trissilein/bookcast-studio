@@ -16,6 +16,7 @@ from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvid
 
 DEFAULT_PIPER_EXE = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe")
 DEFAULT_PIPER_VOICE_DIR = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices")
+DEFAULT_AUDIO_CPP_EXE = Path(r"D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe")
 
 
 def emit(event: str, **payload: Any) -> None:
@@ -35,6 +36,7 @@ def diagnose(library_root: Path) -> int:
         piper=piper.health() if DEFAULT_PIPER_EXE.exists() else False,
         piper_executable=str(DEFAULT_PIPER_EXE) if DEFAULT_PIPER_EXE.exists() else "",
         piper_voice_dir=str(DEFAULT_PIPER_VOICE_DIR) if DEFAULT_PIPER_VOICE_DIR.exists() else "",
+        audio_cpp_executable=str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else "",
     )
     return 0
 
@@ -74,6 +76,7 @@ def audio_cpp_health(
     audio_cpp_family: str | None = None,
 ) -> int:
     issues: list[str] = []
+    audio_cpp_exe = audio_cpp_exe or (str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else None)
     if not audio_cpp_exe:
         issues.append("audio.cpp executable is not configured")
     elif not Path(audio_cpp_exe).exists() and shutil.which(audio_cpp_exe) is None:
@@ -425,6 +428,7 @@ def _tts_provider(
     piper_model: str | None = None,
 ) -> TtsProvider:
     if provider == "audio_cpp":
+        audio_cpp_exe = audio_cpp_exe or (str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else None)
         if not audio_cpp_exe:
             raise RuntimeError("audio.cpp executable is required")
         if not audio_cpp_model:
