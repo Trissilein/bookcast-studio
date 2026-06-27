@@ -52,6 +52,14 @@ export component AppWindow inherits Window {
     in-out property <int> current-view: 0;
 
     callback save-settings();
+    callback browse-library();
+    callback browse-source-file();
+    callback browse-source-folder();
+    callback browse-calibre();
+    callback browse-piper-exe();
+    callback browse-piper-voice-dir();
+    callback browse-audio-cpp-exe();
+    callback browse-audio-cpp-model();
     callback diagnose();
     callback list-books();
     callback import-source();
@@ -157,7 +165,11 @@ export component AppWindow inherits Window {
                             Text { text: "TTS Studio"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
 
                             Text { text: "Library root"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.library-path; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.library-path; }
+                                Button { text: "Browse"; clicked => { root.browse-library(); } }
+                            }
 
                             Text { text: "Book id"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.book-id; }
@@ -202,13 +214,33 @@ export component AppWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Text { visible: root.engine-index == 1; text: "Piper executable"; color: rgb(89, 99, 93); }
-                            LineEdit { visible: root.engine-index == 1; text <=> root.piper-exe; }
+                            HorizontalLayout {
+                                visible: root.engine-index == 1;
+                                spacing: 10px;
+                                LineEdit { text <=> root.piper-exe; }
+                                Button { text: "Browse"; clicked => { root.browse-piper-exe(); } }
+                            }
                             Text { visible: root.engine-index == 1; text: "Piper voices folder"; color: rgb(89, 99, 93); }
-                            LineEdit { visible: root.engine-index == 1; text <=> root.piper-voice-dir; }
+                            HorizontalLayout {
+                                visible: root.engine-index == 1;
+                                spacing: 10px;
+                                LineEdit { text <=> root.piper-voice-dir; }
+                                Button { text: "Browse"; clicked => { root.browse-piper-voice-dir(); } }
+                            }
                             Text { visible: root.engine-index == 2; text: "audio.cpp executable"; color: rgb(89, 99, 93); }
-                            LineEdit { visible: root.engine-index == 2; text <=> root.audio-cpp-exe; }
+                            HorizontalLayout {
+                                visible: root.engine-index == 2;
+                                spacing: 10px;
+                                LineEdit { text <=> root.audio-cpp-exe; }
+                                Button { text: "Browse"; clicked => { root.browse-audio-cpp-exe(); } }
+                            }
                             Text { visible: root.engine-index == 2; text: "audio.cpp model"; color: rgb(89, 99, 93); }
-                            LineEdit { visible: root.engine-index == 2; text <=> root.audio-cpp-model; }
+                            HorizontalLayout {
+                                visible: root.engine-index == 2;
+                                spacing: 10px;
+                                LineEdit { text <=> root.audio-cpp-model; }
+                                Button { text: "Browse"; clicked => { root.browse-audio-cpp-model(); } }
+                            }
                             HorizontalLayout {
                                 visible: root.engine-index == 2;
                                 spacing: 10px;
@@ -259,14 +291,23 @@ export component AppWindow inherits Window {
                             Text { text: "Import Wizard"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Step 1: import a local TXT, MD, EPUB, DOCX, or PDF file, or a folder containing them."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
                             Text { text: "Source file or folder"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.source-path; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.source-path; }
+                                Button { text: "File"; clicked => { root.browse-source-file(); } }
+                                Button { text: "Folder"; clicked => { root.browse-source-folder(); } }
+                            }
                             Button { text: "Import Source"; clicked => { root.import-source(); } }
 
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
 
                             Text { text: "Step 2: or connect Calibre. Diagnose first, then scan, then import selected IDs."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
                             Text { text: "Calibre library"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.calibre-path; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.calibre-path; }
+                                Button { text: "Browse"; clicked => { root.browse-calibre(); } }
+                            }
                             Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
                             Button { text: "Scan Calibre"; clicked => { root.scan-calibre(); } }
                             Text { text: "Calibre IDs"; color: rgb(89, 99, 93); }
@@ -467,19 +508,39 @@ export component AppWindow inherits Window {
 
                             Text { text: "Settings"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Library root"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.library-path; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.library-path; }
+                                Button { text: "Browse"; clicked => { root.browse-library(); } }
+                            }
                             Text { text: "Default output format"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.output-format; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.voice-name; }
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.audio-cpp-exe; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.audio-cpp-exe; }
+                                Button { text: "Browse"; clicked => { root.browse-audio-cpp-exe(); } }
+                            }
                             Text { text: "Piper executable"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.piper-exe; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.piper-exe; }
+                                Button { text: "Browse"; clicked => { root.browse-piper-exe(); } }
+                            }
                             Text { text: "Piper voices folder"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.piper-voice-dir; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.piper-voice-dir; }
+                                Button { text: "Browse"; clicked => { root.browse-piper-voice-dir(); } }
+                            }
                             Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
-                            LineEdit { text <=> root.audio-cpp-model; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.audio-cpp-model; }
+                                Button { text: "Browse"; clicked => { root.browse-audio-cpp-model(); } }
+                            }
                             Text { text: "audio.cpp backend"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-backend; }
                             Text { text: "audio.cpp family"; color: rgb(89, 99, 93); }
@@ -596,6 +657,87 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         match save_settings(&app, &settings_state.repo_root) {
             Ok(path) => app.set_status_text(format!("Settings saved: {}", path.display()).into()),
             Err(error) => app.set_status_text(format!("Settings save failed: {error}").into()),
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_library(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_folder("Choose BookCast library folder") {
+            app.set_library_path(path_to_string(&path).into());
+            app.set_status_text(format!("Library path selected: {}", path.display()).into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_source_file(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file(
+            "Choose book source",
+            &[("Books", &["txt", "md", "epub", "docx", "pdf"])],
+        ) {
+            app.set_source_path(path_to_string(&path).into());
+            app.set_guide_text("Source file selected. Click Import Source next.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_source_folder(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_folder("Choose folder with book sources") {
+            app.set_source_path(path_to_string(&path).into());
+            app.set_guide_text(
+                "Source folder selected. Import will recursively use supported files.".into(),
+            );
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_calibre(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_folder("Choose Calibre library root") {
+            app.set_calibre_path(path_to_string(&path).into());
+            app.set_guide_text("Calibre folder selected. Click Diagnose Calibre next.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_piper_exe(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose piper executable", &[("Executable", &["exe"])]) {
+            app.set_piper_exe(path_to_string(&path).into());
+            app.set_status_text("Piper executable selected.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_piper_voice_dir(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_folder("Choose Piper voices folder") {
+            app.set_piper_voice_dir(path_to_string(&path).into());
+            app.set_status_text("Piper voices folder selected.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_audio_cpp_exe(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose audio.cpp executable", &[("Executable", &["exe"])])
+        {
+            app.set_audio_cpp_exe(path_to_string(&path).into());
+            app.set_status_text("audio.cpp executable selected.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_audio_cpp_model(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file(
+            "Choose audio.cpp model",
+            &[("Models", &["gguf", "bin", "onnx"])],
+        ) {
+            app.set_audio_cpp_model(path_to_string(&path).into());
+            app.set_guide_text("audio.cpp model selected. Click Check audio.cpp next.".into());
         }
     });
 
@@ -1185,6 +1327,22 @@ fn find_repo_root() -> PathBuf {
 
 fn settings_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".bookcast-workbench.json")
+}
+
+fn choose_folder(title: &str) -> Option<PathBuf> {
+    rfd::FileDialog::new().set_title(title).pick_folder()
+}
+
+fn choose_file(title: &str, filters: &[(&str, &[&str])]) -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new().set_title(title);
+    for (name, extensions) in filters {
+        dialog = dialog.add_filter(*name, *extensions);
+    }
+    dialog.pick_file()
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
 }
 
 fn load_settings(app: &AppWindow, repo_root: &Path) {
