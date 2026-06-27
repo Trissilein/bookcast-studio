@@ -125,6 +125,7 @@ BookCast reads Calibre through the official `calibredb` CLI and copies exported
 files into its own library. It does not write back to Calibre.
 The Rust Import Wizard diagnoses wrong folders, missing `metadata.db`, missing
 `calibredb`, and locked/unreadable libraries before scanning.
+It exposes this as an explicit `Diagnose Calibre` step before `Scan Calibre`.
 
 ```powershell
 .\.venv\Scripts\bookcast calibre scan "C:\Users\you\Calibre Library"

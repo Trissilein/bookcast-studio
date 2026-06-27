@@ -53,6 +53,7 @@ export component AppWindow inherits Window {
     callback diagnose();
     callback list-books();
     callback import-source();
+    callback diagnose-calibre();
     callback scan-calibre();
     callback import-calibre();
     callback load-preview();
@@ -252,14 +253,17 @@ export component AppWindow inherits Window {
                             spacing: 12px;
 
                             Text { text: "Import Wizard"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Step 1: import a local TXT, MD, EPUB, DOCX, or PDF file."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
                             Text { text: "Source file"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.source-path; }
                             Button { text: "Import Source"; clicked => { root.import-source(); } }
 
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
 
+                            Text { text: "Step 2: or connect Calibre. Diagnose first, then scan, then import selected IDs."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
                             Text { text: "Calibre library"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.calibre-path; }
+                            Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
                             Button { text: "Scan Calibre"; clicked => { root.scan-calibre(); } }
                             Text { text: "Calibre IDs"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.calibre-ids; }
@@ -636,6 +640,23 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
                 "--library".into(),
                 library,
             ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let calibre_diagnose_state = state.clone();
+    app.on_diagnose_calibre(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let calibre = app.get_calibre_path().to_string();
+        if calibre.trim().is_empty() {
+            app.set_status_text("Calibre diagnose needs a library path.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            calibre_diagnose_state.clone(),
+            "calibre diagnose",
+            vec!["bridge".into(), "calibre-diagnose".into(), calibre],
         );
     });
 
