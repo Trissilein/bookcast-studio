@@ -43,11 +43,10 @@ def main() -> int:
 
         imported = run_bridge(repo, ["import", str(source), "--library", str(library)])
         assert_event(imported, "job_done")
-        book_id = str(imported[-1]["book_id"])
+        book_id = str(first_event(imported, "job_done")["book_id"])
 
-        preview = run_bridge(repo, ["book-preview", book_id, "--library", str(library)])
-        assert_event(preview, "book_preview")
-        require("Acceptance Smoke" in str(preview[0].get("preview", "")), "Preview missing expected text")
+        preview = first_event(imported, "book_preview")
+        require("Acceptance Smoke" in str(preview.get("preview", "")), "Import preview missing expected text")
 
         if not args.skip_render:
             sample = run_bridge(
@@ -55,7 +54,7 @@ def main() -> int:
                 ["sample-render", book_id, "--library", str(library), "--format", "opus", "--voice", voice],
             )
             assert_event(sample, "job_done")
-            sample_path = Path(str(sample[-1]["output"]))
+            sample_path = Path(str(first_event(sample, "job_done")["output"]))
             require(sample_path.exists(), f"Sample output missing: {sample_path}")
 
             rendered = run_bridge(
@@ -63,7 +62,7 @@ def main() -> int:
                 ["render", book_id, "--library", str(library), "--format", "opus", "--voice", voice],
             )
             assert_event(rendered, "job_done")
-            output_path = Path(str(rendered[-1]["output"]))
+            output_path = Path(str(first_event(rendered, "job_done")["output"]))
             require(output_path.exists(), f"Render output missing: {output_path}")
 
             outputs = run_bridge(repo, ["outputs", "--library", str(library), "--book-id", book_id])
@@ -106,7 +105,7 @@ def main() -> int:
                     ],
                 )
                 assert_event(piper_sample, "job_done")
-                piper_path = Path(str(piper_sample[-1]["output"]))
+                piper_path = Path(str(first_event(piper_sample, "job_done")["output"]))
                 require(piper_path.exists(), f"Piper sample output missing: {piper_path}")
 
         print(json.dumps({"ok": True, "library": str(library), "book_id": book_id}, indent=2))
@@ -145,6 +144,13 @@ def dict_environ() -> dict[str, str]:
 
 def assert_event(events: list[dict[str, object]], name: str) -> None:
     require(any(event.get("event") == name for event in events), f"Missing event: {name}")
+
+
+def first_event(events: list[dict[str, object]], name: str) -> dict[str, object]:
+    for event in events:
+        if event.get("event") == name:
+            return event
+    raise RuntimeError(f"Missing event: {name}")
 
 
 def require(value: object, message: str) -> None:

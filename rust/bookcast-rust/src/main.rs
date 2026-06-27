@@ -1590,9 +1590,10 @@ fn handle_bridge_events(
                 update_job(weak.clone(), jobs.clone(), job_id, "done", 100, detail);
                 if let Some(book_id) = value.get("book_id").and_then(Value::as_str) {
                     set_book_id(weak.clone(), book_id);
+                    set_current_view(weak.clone(), 0);
                     set_guide(
                         weak.clone(),
-                        "Import finished. Book id was filled in. Choose engine and render.",
+                        "Import finished. Preview loads automatically. Render a sample next.",
                     );
                 }
                 if let Some(output) = value.get("output").and_then(Value::as_str) {
@@ -1843,6 +1844,7 @@ fn handle_bridge_events(
                     weak.clone(),
                     &format!("{author} - {title}\n{chunk_count} chunks\n\n{chapters}\n\n{preview}"),
                 );
+                set_current_view(weak.clone(), 0);
                 set_guide(
                     weak.clone(),
                     "Preview loaded. Render sample before full render.",
@@ -1898,6 +1900,7 @@ fn handle_bridge_events(
                 let book_id = value.get("book_id").and_then(Value::as_str).unwrap_or("");
                 if !book_id.is_empty() {
                     set_book_id(weak.clone(), book_id);
+                    set_current_view(weak.clone(), 0);
                 }
                 set_guide(
                     weak.clone(),
@@ -2098,6 +2101,14 @@ fn set_book_id(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_book_id(text.into());
+        }
+    });
+}
+
+fn set_current_view(weak: slint::Weak<AppWindow>, view: i32) {
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_current_view(view);
         }
     });
 }

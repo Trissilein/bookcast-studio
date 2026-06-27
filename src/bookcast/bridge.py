@@ -131,30 +131,7 @@ def outputs(library_root: Path, book_id: str | None = None) -> int:
 def book_preview(library_root: Path, book_id: str, max_chars: int = 1400) -> int:
     library = BookLibrary(library_root)
     try:
-        book = library.get_book(book_id)
-        if not book:
-            raise ValueError(f"Unknown book id: {book_id}")
-        chapters = library.get_chapters(book_id)
-        chunks = library.get_chunks(book_id)
-        preview_parts: list[str] = []
-        for chapter in chapters[:5]:
-            text = str(chapter["text"]).strip().replace("\r\n", "\n")
-            preview_parts.append(f"# {chapter['title']}\n{text[:max_chars]}")
-        emit(
-            "book_preview",
-            book=book,
-            chapters=[
-                {
-                    "index": chapter["chapter_index"],
-                    "title": chapter["title"],
-                    "chars": len(str(chapter["text"])),
-                }
-                for chapter in chapters
-            ],
-            chunk_count=len(chunks),
-            first_chunk=chunks[0] if chunks else None,
-            preview="\n\n".join(preview_parts)[:max_chars],
-        )
+        emit("book_preview", **_book_preview_payload(library, book_id, max_chars=max_chars))
     finally:
         library.close()
     return 0
@@ -266,6 +243,7 @@ def import_file(library_root: Path, source: Path, cleanup_profile: str = "standa
         book = library.get_book(book_id)
         emit("job_progress", job="import", progress=100)
         emit("job_done", job="import", book_id=book_id, book=book)
+        emit("book_preview", **_book_preview_payload(library, book_id))
     finally:
         library.close()
     return 0
@@ -341,6 +319,7 @@ def calibre_import(
                 imported=index,
                 total=total,
             )
+            emit("book_preview", **_book_preview_payload(library, book_id))
         emit("job_done", job="calibre_import", count=len(imported), imported=imported)
     finally:
         library.close()
@@ -473,6 +452,32 @@ def _book_text(library_root: Path, book_id: str) -> str:
         return "\n\n".join(str(chapter["text"]) for chapter in library.get_chapters(book_id))
     finally:
         library.close()
+
+
+def _book_preview_payload(library: BookLibrary, book_id: str, max_chars: int = 1400) -> dict[str, object]:
+    book = library.get_book(book_id)
+    if not book:
+        raise ValueError(f"Unknown book id: {book_id}")
+    chapters = library.get_chapters(book_id)
+    chunks = library.get_chunks(book_id)
+    preview_parts: list[str] = []
+    for chapter in chapters[:5]:
+        text = str(chapter["text"]).strip().replace("\r\n", "\n")
+        preview_parts.append(f"# {chapter['title']}\n{text[:max_chars]}")
+    return {
+        "book": book,
+        "chapters": [
+            {
+                "index": chapter["chapter_index"],
+                "title": chapter["title"],
+                "chars": len(str(chapter["text"])),
+            }
+            for chapter in chapters
+        ],
+        "chunk_count": len(chunks),
+        "first_chunk": chunks[0] if chunks else None,
+        "preview": "\n\n".join(preview_parts)[:max_chars],
+    }
 
 
 def _parse_voice_entries(entries: list[str]) -> dict[str, str]:

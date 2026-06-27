@@ -21,8 +21,10 @@ def test_bridge_import_and_list_emit_jsonl(tmp_path: Path, capsys) -> None:
     import_events = _events(capsys.readouterr().out)
 
     assert result == 0
-    assert [event["event"] for event in import_events] == ["job_started", "job_progress", "job_done"]
-    assert import_events[-1]["book_id"]
+    assert [event["event"] for event in import_events] == ["job_started", "job_progress", "job_done", "book_preview"]
+    assert import_events[2]["book_id"]
+    assert import_events[3]["book"]["title"] == "Bridge Book"
+    assert import_events[3]["chunk_count"] >= 1
 
     result = main(["bridge", "list", "--library", str(library_root)])
     list_events = _events(capsys.readouterr().out)
@@ -95,9 +97,11 @@ def test_bridge_calibre_import_emits_progress(tmp_path: Path, capsys, monkeypatc
         "job_started",
         "calibre_imported",
         "job_progress",
+        "book_preview",
         "job_done",
     ]
     assert events[-1]["imported"][0]["calibre_id"] == "7"
+    assert events[-2]["book"]["title"] == "Calibre Bridge"
 
 
 def test_bridge_calibre_scan_explains_bad_library_path(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -122,7 +126,7 @@ def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypat
 
     main(["bridge", "import", str(source), "--library", str(library_root)])
     import_events = _events(capsys.readouterr().out)
-    book_id = str(import_events[-1]["book_id"])
+    book_id = str(next(event["book_id"] for event in import_events if event.get("event") == "job_done"))
 
     result = main(["bridge", "book-preview", book_id, "--library", str(library_root)])
     preview_events = _events(capsys.readouterr().out)
@@ -302,7 +306,7 @@ def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) 
     source.write_text("Ada said hello. Narrator explains.", encoding="utf-8")
 
     main(["bridge", "import", str(source), "--library", str(library_root)])
-    book_id = str(_events(capsys.readouterr().out)[-1]["book_id"])
+    book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
 
     class FakeOllama:
         def __init__(self, model: str, base_url: str) -> None:
@@ -331,7 +335,7 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     source.write_text("A short article about careful engineering.", encoding="utf-8")
 
     main(["bridge", "import", str(source), "--library", str(library_root)])
-    book_id = str(_events(capsys.readouterr().out)[-1]["book_id"])
+    book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
 
     class FakeOllama:
         def __init__(self, model: str, base_url: str) -> None:
