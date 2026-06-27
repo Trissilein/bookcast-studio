@@ -69,4 +69,5 @@
 - Persist Rust UI settings and add structured views instead of one-page workbench. Done.
 - Add Rust views for character suggestions and static podcast generation. Done.
 - Add a real build/package command and a final end-to-end acceptance script. Done.
+- Reduce early UX friction: auto-select first listed book and prefer Piper after diagnostics when no voice/engine was chosen. Done.
 - Next: install or build a real `audio.cpp` binary/model, validate exact CLI arguments, and polish visual design.

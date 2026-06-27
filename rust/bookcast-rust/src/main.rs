@@ -1580,6 +1580,7 @@ fn handle_bridge_events(
                 set_guide(
                     weak.clone(),
                     if piper {
+                        prefer_piper_engine(weak.clone());
                         "Diagnostics found Piper. Choose Piper local process, discover voices, then render a sample."
                     } else if sapi {
                         "Diagnostics OK enough for Windows SAPI render. Import a source or scan Calibre."
@@ -1608,10 +1609,19 @@ fn handle_bridge_events(
                             .join("\n")
                     })
                     .unwrap_or_else(|| "No books loaded.".to_string());
+                if let Some(first_id) = value
+                    .get("books")
+                    .and_then(Value::as_array)
+                    .and_then(|items| items.first())
+                    .and_then(|book| book.get("id"))
+                    .and_then(Value::as_str)
+                {
+                    set_book_id_if_empty(weak.clone(), first_id);
+                }
                 set_books(weak.clone(), &books);
                 set_guide(
                     weak.clone(),
-                    "Paste a book id from the Books list into TTS Studio, then render.",
+                    "Books loaded. First book id is selected automatically if the field was empty.",
                 );
             }
             Some("book_preview") => {
@@ -1899,6 +1909,27 @@ fn set_book_id(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_book_id(text.into());
+        }
+    });
+}
+
+fn set_book_id_if_empty(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            if app.get_book_id().to_string().trim().is_empty() {
+                app.set_book_id(text.into());
+            }
+        }
+    });
+}
+
+fn prefer_piper_engine(weak: slint::Weak<AppWindow>) {
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            if app.get_engine_index() == 0 && app.get_voice_name().to_string().trim().is_empty() {
+                app.set_engine_index(1);
+            }
         }
     });
 }
