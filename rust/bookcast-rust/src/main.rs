@@ -34,6 +34,12 @@ export component AppWindow inherits Window {
     in-out property <string> diagnostic-text: "Run diagnostics before importing.";
     in-out property <string> books-text: "No books loaded.";
     in-out property <string> book-preview-text: "Select or import a book, then load preview.";
+    in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
+    in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
+    in-out property <string> ollama-url: "http://127.0.0.1:11434";
+    in-out property <string> ollama-model: "qwen3:8b";
+    in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
+    in-out property <int> podcast-mode-index: 0;
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
@@ -48,6 +54,9 @@ export component AppWindow inherits Window {
     callback load-preview();
     callback sample-render();
     callback render-book();
+    callback suggest-characters();
+    callback podcast-script();
+    callback podcast-render();
     callback discover-voices();
     callback open-output();
     callback refresh-audio-cpp();
@@ -77,7 +86,9 @@ export component AppWindow inherits Window {
                     Button { text: "TTS Studio"; clicked => { root.current-view = 0; } }
                     Button { text: "Import"; clicked => { root.current-view = 1; } }
                     Button { text: "Library"; clicked => { root.current-view = 2; } }
-                    Button { text: "Settings"; clicked => { root.current-view = 3; } }
+                    Button { text: "Characters"; clicked => { root.current-view = 3; } }
+                    Button { text: "Podcast"; clicked => { root.current-view = 4; } }
+                    Button { text: "Settings"; clicked => { root.current-view = 5; } }
 
                     Rectangle { height: 1px; background: rgb(48, 64, 57); }
 
@@ -303,6 +314,92 @@ export component AppWindow inherits Window {
                             padding: 16px;
                             spacing: 12px;
 
+                            Text { text: "Characters"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Book id"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.book-id; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Ollama URL"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.ollama-url; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Model"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.ollama-model; }
+                                }
+                            }
+                            Button { text: "Suggest Characters"; clicked => { root.suggest-characters(); } }
+                            Text {
+                                text: root.character-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Manual confirmation required before per-character rendering."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.current-view == 4;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            Text { text: "Podcast Studio"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Book id"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.book-id; }
+                            Text { text: "Mode"; color: rgb(89, 99, 93); }
+                            ComboBox {
+                                model: ["educational", "controversial", "interview"];
+                                current-index <=> root.podcast-mode-index;
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Ollama URL"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.ollama-url; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Model"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.ollama-model; }
+                                }
+                            }
+                            Text { text: "Speaker voices: speaker=voice, separated by semicolon or comma"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.speaker-voice-map; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Generate Script"; clicked => { root.podcast-script(); } }
+                                Button { text: "Render Podcast"; clicked => { root.podcast-render(); } }
+                            }
+                            Text {
+                                text: root.podcast-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text { text: "Last Output"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.current-view == 5;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
                             Text { text: "Settings"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Library root"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.library-path; }
@@ -318,6 +415,10 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.audio-cpp-backend; }
                             Text { text: "audio.cpp family"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-family; }
+                            Text { text: "Ollama URL"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.ollama-url; }
+                            Text { text: "Ollama model"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.ollama-model; }
                             Button { text: "Save Settings"; clicked => { root.save-settings(); } }
                         }
                     }
@@ -379,6 +480,10 @@ struct WorkbenchSettings {
     audio_cpp_model: String,
     audio_cpp_backend: String,
     audio_cpp_family: String,
+    ollama_url: String,
+    ollama_model: String,
+    speaker_voice_map: String,
+    podcast_mode_index: i32,
     engine_index: i32,
     current_view: i32,
 }
@@ -579,6 +684,61 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         }
         let args = render_args(&app, "render", book_id);
         run_bridge(app.as_weak(), render_state.clone(), "render", args);
+    });
+
+    let weak = app.as_weak();
+    let character_state = state.clone();
+    app.on_suggest_characters(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Character extraction needs a book id.".into());
+            return;
+        }
+        let mut args = vec![
+            "bridge".into(),
+            "characters".into(),
+            book_id,
+            "--library".into(),
+            app.get_library_path().to_string(),
+        ];
+        args.extend(ollama_args(&app));
+        run_bridge(app.as_weak(), character_state.clone(), "characters", args);
+    });
+
+    let weak = app.as_weak();
+    let script_state = state.clone();
+    app.on_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Podcast script needs a book id.".into());
+            return;
+        }
+        let mut args = vec![
+            "bridge".into(),
+            "podcast-script".into(),
+            book_id,
+            "--library".into(),
+            app.get_library_path().to_string(),
+            "--mode".into(),
+            podcast_mode(app.get_podcast_mode_index()).into(),
+        ];
+        args.extend(ollama_args(&app));
+        run_bridge(app.as_weak(), script_state.clone(), "podcast script", args);
+    });
+
+    let weak = app.as_weak();
+    let podcast_render_state = state.clone();
+    app.on_podcast_render(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Podcast render needs a book id.".into());
+            return;
+        }
+        let args = podcast_render_args(&app, book_id);
+        run_bridge(app.as_weak(), podcast_render_state.clone(), "podcast render", args);
     });
 
     let weak = app.as_weak();
@@ -868,6 +1028,16 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_audio_cpp_backend(settings.audio_cpp_backend.into());
     }
     app.set_audio_cpp_family(settings.audio_cpp_family.into());
+    if !settings.ollama_url.is_empty() {
+        app.set_ollama_url(settings.ollama_url.into());
+    }
+    if !settings.ollama_model.is_empty() {
+        app.set_ollama_model(settings.ollama_model.into());
+    }
+    if !settings.speaker_voice_map.is_empty() {
+        app.set_speaker_voice_map(settings.speaker_voice_map.into());
+    }
+    app.set_podcast_mode_index(settings.podcast_mode_index);
     app.set_engine_index(settings.engine_index);
     app.set_current_view(settings.current_view);
     app.set_status_text(format!("Settings loaded: {}", path.display()).into());
@@ -888,6 +1058,10 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         audio_cpp_model: app.get_audio_cpp_model().to_string(),
         audio_cpp_backend: app.get_audio_cpp_backend().to_string(),
         audio_cpp_family: app.get_audio_cpp_family().to_string(),
+        ollama_url: app.get_ollama_url().to_string(),
+        ollama_model: app.get_ollama_model().to_string(),
+        speaker_voice_map: app.get_speaker_voice_map().to_string(),
+        podcast_mode_index: app.get_podcast_mode_index(),
         engine_index: app.get_engine_index(),
         current_view: app.get_current_view(),
     };
@@ -910,6 +1084,37 @@ fn split_ids(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn split_voice_map(value: &str) -> Vec<String> {
+    value
+        .split(|ch: char| ch == '\n' || ch == '\r' || ch == ';' || ch == ',')
+        .filter_map(|part| {
+            let trimmed = part.trim();
+            if trimmed.is_empty() || !trimmed.contains('=') {
+                return None;
+            }
+            let (speaker, voice) = trimmed.split_once('=').unwrap_or(("", ""));
+            (!speaker.trim().is_empty() && !voice.trim().is_empty()).then(|| trimmed.to_string())
+        })
+        .collect()
+}
+
+fn podcast_mode(index: i32) -> &'static str {
+    match index {
+        1 => "controversial",
+        2 => "interview",
+        _ => "educational",
+    }
+}
+
+fn ollama_args(app: &AppWindow) -> Vec<String> {
+    vec![
+        "--ollama-url".into(),
+        app.get_ollama_url().to_string(),
+        "--model".into(),
+        app.get_ollama_model().to_string(),
+    ]
+}
+
 fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     let mut args = vec![
         "bridge".into(),
@@ -923,6 +1128,44 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     let voice = app.get_voice_name().to_string();
     if !voice.trim().is_empty() {
         args.extend(["--voice".into(), voice]);
+    }
+    if app.get_engine_index() == 1 {
+        args.extend(["--provider".into(), "audio_cpp".into()]);
+        args.extend([
+            "--audio-cpp-exe".into(),
+            app.get_audio_cpp_exe().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-model".into(),
+            app.get_audio_cpp_model().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-backend".into(),
+            app.get_audio_cpp_backend().to_string(),
+        ]);
+        let family = app.get_audio_cpp_family().to_string();
+        if !family.trim().is_empty() {
+            args.extend(["--audio-cpp-family".into(), family]);
+        }
+    }
+    args
+}
+
+fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        "podcast-render".into(),
+        book_id,
+        "--library".into(),
+        app.get_library_path().to_string(),
+        "--mode".into(),
+        podcast_mode(app.get_podcast_mode_index()).into(),
+        "--format".into(),
+        app.get_output_format().to_string(),
+    ];
+    args.extend(ollama_args(app));
+    for entry in split_voice_map(&app.get_speaker_voice_map().to_string()) {
+        args.extend(["--voice".into(), entry]);
     }
     if app.get_engine_index() == 1 {
         args.extend(["--provider".into(), "audio_cpp".into()]);
@@ -1333,6 +1576,76 @@ fn handle_bridge_events(
                     &format!("Imported from Calibre: {title}. Book id filled for render."),
                 );
             }
+            Some("characters") => {
+                let text = value
+                    .get("candidates")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .map(|item| {
+                                let name = item.get("name").and_then(Value::as_str).unwrap_or("");
+                                let role = item.get("role").and_then(Value::as_str).unwrap_or("");
+                                let evidence = item
+                                    .get("evidence")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("");
+                                format!("{name} | {role} | {evidence}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No character candidates returned.".to_string());
+                set_character_text(weak.clone(), &text);
+                set_guide(
+                    weak.clone(),
+                    "Character candidates loaded. Confirm names manually before voice assignment.",
+                );
+            }
+            Some("podcast_script") => {
+                let script = value.get("script").unwrap_or(&Value::Null);
+                let title = script.get("title").and_then(Value::as_str).unwrap_or("Untitled");
+                let summary = script.get("summary").and_then(Value::as_str).unwrap_or("");
+                let speakers = script
+                    .get("speakers")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
+                let turns = script
+                    .get("turns")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(12)
+                            .map(|turn| {
+                                let speaker =
+                                    turn.get("speaker").and_then(Value::as_str).unwrap_or("host");
+                                let text = turn.get("text").and_then(Value::as_str).unwrap_or("");
+                                format!("{speaker}: {text}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .unwrap_or_default();
+                set_podcast_text(
+                    weak.clone(),
+                    &format!("{title}\nSpeakers: {speakers}\n\n{summary}\n\n{turns}"),
+                );
+                if let Some(path) = value.get("path").and_then(Value::as_str) {
+                    set_guide(weak.clone(), &format!("Podcast script saved: {path}"));
+                } else if let Some(output) = value.get("output").and_then(Value::as_str) {
+                    set_last_output(weak.clone(), output);
+                    set_guide(weak.clone(), &format!("Podcast rendered: {output}"));
+                }
+            }
             Some("error") => {
                 if let Some(message) = value.get("message").and_then(Value::as_str) {
                     update_job(weak.clone(), jobs.clone(), job_id, "failed", 100, message);
@@ -1391,6 +1704,24 @@ fn set_book_preview(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_book_preview_text(text.into());
+        }
+    });
+}
+
+fn set_character_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_character_text(text.into());
+        }
+    });
+}
+
+fn set_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_podcast_text(text.into());
         }
     });
 }

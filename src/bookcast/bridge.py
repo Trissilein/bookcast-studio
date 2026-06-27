@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from .calibre import CalibreClient, find_calibredb
+from .characters import suggest_characters as generate_character_suggestions
 from .library import BookLibrary
+from .llm import OllamaProvider
+from .podcast import generate_podcast_script
 from .tts import AudioCppProvider, TtsProvider, WindowsSapiProvider
 
 
@@ -97,6 +100,97 @@ def book_preview(library_root: Path, book_id: str, max_chars: int = 1400) -> int
         )
     finally:
         library.close()
+    return 0
+
+
+def characters(
+    library_root: Path,
+    book_id: str,
+    ollama_url: str = "http://127.0.0.1:11434",
+    model: str = "qwen3:8b",
+) -> int:
+    emit("job_started", job="characters", book_id=book_id, provider="ollama", model=model)
+    text = _book_text(library_root, book_id)
+    provider = OllamaProvider(model=model, base_url=ollama_url)
+    if not provider.health():
+        raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+    emit("job_progress", job="characters", progress=20)
+    candidates = generate_character_suggestions(text, provider)
+    emit("characters", candidates=[candidate.__dict__ for candidate in candidates])
+    emit("job_done", job="characters", count=len(candidates))
+    return 0
+
+
+def podcast_script(
+    library_root: Path,
+    book_id: str,
+    mode: str = "educational",
+    ollama_url: str = "http://127.0.0.1:11434",
+    model: str = "qwen3:8b",
+) -> int:
+    emit("job_started", job="podcast_script", book_id=book_id, mode=mode, provider="ollama", model=model)
+    text = _book_text(library_root, book_id)
+    provider = OllamaProvider(model=model, base_url=ollama_url)
+    if not provider.health():
+        raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+    emit("job_progress", job="podcast_script", progress=20)
+    script = generate_podcast_script(text, provider, mode=mode)
+    library = BookLibrary(library_root)
+    try:
+        path = library.save_podcast_script(book_id, script.to_dict())
+    finally:
+        library.close()
+    emit("podcast_script", script=script.to_dict(), path=str(path))
+    emit("job_done", job="podcast_script", path=str(path), count=len(script.turns))
+    return 0
+
+
+def podcast_render(
+    library_root: Path,
+    book_id: str,
+    mode: str = "educational",
+    output_format: str = "opus",
+    voice_entries: list[str] | None = None,
+    rate: int = 0,
+    ffmpeg: str = "ffmpeg",
+    ollama_url: str = "http://127.0.0.1:11434",
+    model: str = "qwen3:8b",
+    provider: str = "windows_sapi",
+    audio_cpp_exe: str | None = None,
+    audio_cpp_model: str | None = None,
+    audio_cpp_backend: str = "cpu",
+    audio_cpp_family: str | None = None,
+) -> int:
+    emit("job_started", job="podcast_render", book_id=book_id, mode=mode, format=output_format, provider=provider)
+    text = _book_text(library_root, book_id)
+    llm = OllamaProvider(model=model, base_url=ollama_url)
+    if not llm.health():
+        raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+    emit("job_progress", job="podcast_render", progress=20)
+    script = generate_podcast_script(text, llm, mode=mode)
+    tts_provider = _tts_provider(
+        provider,
+        audio_cpp_exe=audio_cpp_exe,
+        audio_cpp_model=audio_cpp_model,
+        audio_cpp_backend=audio_cpp_backend,
+        audio_cpp_family=audio_cpp_family,
+    )
+    library = BookLibrary(library_root)
+    try:
+        output = library.render_podcast_script(
+            book_id,
+            script,
+            output_format=output_format,
+            provider=tts_provider,
+            voice_map=_parse_voice_entries(voice_entries or []),
+            ffmpeg=ffmpeg,
+            rate=rate,
+        )
+    finally:
+        library.close()
+    emit("podcast_script", script=script.to_dict(), output=str(output))
+    emit("job_progress", job="podcast_render", progress=100)
+    emit("job_done", job="podcast_render", output=str(output), count=len(script.turns))
     return 0
 
 
@@ -267,6 +361,31 @@ def _tts_provider(
             family=audio_cpp_family,
         )
     return WindowsSapiProvider()
+
+
+def _book_text(library_root: Path, book_id: str) -> str:
+    library = BookLibrary(library_root)
+    try:
+        book = library.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        return "\n\n".join(str(chapter["text"]) for chapter in library.get_chapters(book_id))
+    finally:
+        library.close()
+
+
+def _parse_voice_entries(entries: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for entry in entries:
+        if "=" not in entry:
+            raise ValueError(f"Invalid voice mapping: {entry!r}; expected speaker=voice")
+        speaker, voice = entry.split("=", 1)
+        speaker = speaker.strip()
+        voice = voice.strip()
+        if not speaker or not voice:
+            raise ValueError(f"Invalid voice mapping: {entry!r}; expected speaker=voice")
+        mapping[speaker] = voice
+    return mapping
 
 
 def run_safely(fn, *args: Any, **kwargs: Any) -> int:

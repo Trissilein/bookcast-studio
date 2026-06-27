@@ -36,14 +36,15 @@
 ## M4 Voices + Characters
 
 - Add narrator and speaker tables in UI. Done.
-- Add Ollama-assisted character extraction. CLI foundation done.
-- Sync speaker to voice mappings for podcast render.
+- Add Ollama-assisted character extraction. CLI and Rust workbench bridge done.
+- Sync speaker to voice mappings for podcast render. Done.
 - Require manual confirmation before rendering character voices.
 
 ## M5 Static Podcast Generator
 
-- Generate educational, controversial, and interview scripts from sources. CLI foundation done.
+- Generate educational, controversial, and interview scripts from sources. CLI and Rust workbench bridge done.
 - Render multi-speaker episodes. Done.
+- Expose static podcast script/render actions in Rust workbench. Done.
 
 ## M6 Interactive Podcast
 
@@ -63,5 +64,6 @@
 - Add source/chapter preview panes and render sample before full queue. Done.
 - Add voice discovery/selection and output-open actions. Done.
 - Persist Rust UI settings and add structured views instead of one-page workbench. Done.
+- Add Rust views for character suggestions and static podcast generation. Done.
 - Add a real build/package command and a final end-to-end acceptance script. Done.
 - Next: validate real `audio.cpp` CLI arguments against an installed binary/model and polish visual design.

@@ -125,6 +125,35 @@ def main(argv: list[str] | None = None) -> int:
     bridge_preview.add_argument("--library", type=Path, required=True)
     bridge_preview.add_argument("--max-chars", type=int, default=1400)
 
+    bridge_characters = bridge_sub.add_parser("characters", help="Suggest characters and emit JSONL")
+    bridge_characters.add_argument("book_id")
+    bridge_characters.add_argument("--library", type=Path, required=True)
+    bridge_characters.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    bridge_characters.add_argument("--model", default="qwen3:8b")
+
+    bridge_podcast_script = bridge_sub.add_parser("podcast-script", help="Generate a podcast script and emit JSONL")
+    bridge_podcast_script.add_argument("book_id")
+    bridge_podcast_script.add_argument("--library", type=Path, required=True)
+    bridge_podcast_script.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
+    bridge_podcast_script.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    bridge_podcast_script.add_argument("--model", default="qwen3:8b")
+
+    bridge_podcast_render = bridge_sub.add_parser("podcast-render", help="Generate and render a podcast as JSONL")
+    bridge_podcast_render.add_argument("book_id")
+    bridge_podcast_render.add_argument("--library", type=Path, required=True)
+    bridge_podcast_render.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
+    bridge_podcast_render.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
+    bridge_podcast_render.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    bridge_podcast_render.add_argument("--rate", type=int, default=0)
+    bridge_podcast_render.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    bridge_podcast_render.add_argument("--model", default="qwen3:8b")
+    bridge_podcast_render.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_podcast_render.add_argument("--audio-cpp-exe", default=None)
+    bridge_podcast_render.add_argument("--audio-cpp-model", default=None)
+    bridge_podcast_render.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_podcast_render.add_argument("--audio-cpp-family", default=None)
+
     bridge_import = bridge_sub.add_parser("import", help="Import a source and emit JSONL job events")
     bridge_import.add_argument("file", type=Path)
     bridge_import.add_argument("--library", type=Path, required=True)
@@ -189,6 +218,35 @@ def main(argv: list[str] | None = None) -> int:
             return bridge.run_safely(bridge.outputs, args.library, args.book_id)
         if args.bridge_command == "book-preview":
             return bridge.run_safely(bridge.book_preview, args.library, args.book_id, args.max_chars)
+        if args.bridge_command == "characters":
+            return bridge.run_safely(bridge.characters, args.library, args.book_id, args.ollama_url, args.model)
+        if args.bridge_command == "podcast-script":
+            return bridge.run_safely(
+                bridge.podcast_script,
+                args.library,
+                args.book_id,
+                args.mode,
+                args.ollama_url,
+                args.model,
+            )
+        if args.bridge_command == "podcast-render":
+            return bridge.run_safely(
+                bridge.podcast_render,
+                args.library,
+                args.book_id,
+                args.mode,
+                args.format,
+                args.voice,
+                args.rate,
+                args.ffmpeg,
+                args.ollama_url,
+                args.model,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+            )
         if args.bridge_command == "import":
             return bridge.run_safely(bridge.import_file, args.library, args.file, args.cleanup_profile)
         if args.bridge_command == "calibre-scan":

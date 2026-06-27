@@ -16,7 +16,8 @@ Current slice:
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
 - Interactive podcast sessions with resident Ollama and live follow-ups.
 - Text cleanup and stable chunk hashes.
-- Editable cleanup profiles, chapter review, and speaker mapping in the UI.
+- Editable cleanup profiles and chapter review in the Python UI.
+- Character and podcast workbench views in the Rust UI.
 
 Planned later:
 
@@ -73,6 +74,9 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
 .\.venv\Scripts\bookcast bridge voices
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
+.\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
+.\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
+.\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>
 .\.venv\Scripts\bookcast bridge calibre-scan "C:\Users\you\Calibre Library"
