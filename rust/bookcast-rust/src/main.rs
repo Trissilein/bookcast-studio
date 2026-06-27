@@ -36,6 +36,7 @@ export component AppWindow inherits Window {
     in-out property <string> status-text: "Ready";
     in-out property <string> diagnostic-text: "Run diagnostics before importing.";
     in-out property <string> books-text: "No books loaded.";
+    in-out property <string> book-selection-text: "Refresh Books to enable selection.";
     in-out property <string> book-preview-text: "Select or import a book, then load preview.";
     in-out property <string> cleanup-profile-name: "standard";
     in-out property <string> cleanup-profiles-text: "Load cleanup profiles before changing chunking.";
@@ -67,6 +68,8 @@ export component AppWindow inherits Window {
     callback scan-calibre();
     callback import-calibre();
     callback load-preview();
+    callback previous-book();
+    callback next-book();
     callback load-cleanup-profiles();
     callback apply-cleanup-profile();
     callback sample-render();
@@ -173,7 +176,18 @@ export component AppWindow inherits Window {
 
                             Text { text: "Book id"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.book-id; }
-                            Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Previous Book"; clicked => { root.previous-book(); } }
+                                Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                                Button { text: "Next Book"; clicked => { root.next-book(); } }
+                            }
+                            Text {
+                                text: root.book-selection-text;
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
 
                             Text { text: "Engine"; color: rgb(89, 99, 93); }
                             ComboBox {
@@ -369,7 +383,18 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Book id"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.book-id; }
-                            Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Previous Book"; clicked => { root.previous-book(); } }
+                                Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                                Button { text: "Next Book"; clicked => { root.next-book(); } }
+                            }
+                            Text {
+                                text: root.book-selection-text;
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                             Text { text: "Cleanup profile"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.cleanup-profile-name; }
                             HorizontalLayout {
@@ -589,6 +614,8 @@ struct AppState {
     repo_root: PathBuf,
     active_pid: Arc<Mutex<Option<u32>>>,
     jobs: Arc<Mutex<Vec<JobState>>>,
+    book_ids: Arc<Mutex<Vec<String>>>,
+    book_index: Arc<Mutex<usize>>,
 }
 
 #[derive(Clone)]
@@ -630,6 +657,8 @@ fn main() -> Result<(), slint::PlatformError> {
         repo_root: find_repo_root(),
         active_pid: Arc::new(Mutex::new(None)),
         jobs: Arc::new(Mutex::new(Vec::new())),
+        book_ids: Arc::new(Mutex::new(Vec::new())),
+        book_index: Arc::new(Mutex::new(0)),
     };
 
     app.set_library_path("library".into());
@@ -958,13 +987,47 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.as_weak(),
             render_state.clone(),
             "preview",
-            vec![
-                "bridge".into(),
-                "book-preview".into(),
-                book_id,
-                "--library".into(),
-                app.get_library_path().to_string(),
-            ],
+            preview_args(&app, book_id),
+        );
+    });
+
+    let weak = app.as_weak();
+    let previous_state = state.clone();
+    app.on_previous_book(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let Some(book_id) = select_book_id(
+            &app,
+            &previous_state.book_ids,
+            &previous_state.book_index,
+            -1,
+        ) else {
+            app.set_status_text("Refresh Books before using Previous/Next.".into());
+            return;
+        };
+        app.set_book_id(book_id.clone().into());
+        run_bridge(
+            app.as_weak(),
+            previous_state.clone(),
+            "preview",
+            preview_args(&app, book_id),
+        );
+    });
+
+    let weak = app.as_weak();
+    let next_state = state.clone();
+    app.on_next_book(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let Some(book_id) = select_book_id(&app, &next_state.book_ids, &next_state.book_index, 1)
+        else {
+            app.set_status_text("Refresh Books before using Previous/Next.".into());
+            return;
+        };
+        app.set_book_id(book_id.clone().into());
+        run_bridge(
+            app.as_weak(),
+            next_state.clone(),
+            "preview",
+            preview_args(&app, book_id),
         );
     });
 
@@ -1149,7 +1212,14 @@ fn run_bridge(
                                 "Process failed",
                             );
                         }
-                        handle_bridge_events(weak.clone(), state.jobs.clone(), job_id, &stdout);
+                        handle_bridge_events(
+                            weak.clone(),
+                            state.jobs.clone(),
+                            state.book_ids.clone(),
+                            state.book_index.clone(),
+                            job_id,
+                            &stdout,
+                        );
                         let mut text = String::new();
                         if !stdout.trim().is_empty() {
                             text.push_str(stdout.trim());
@@ -1678,6 +1748,35 @@ fn outputs_args(app: &AppWindow) -> Vec<String> {
     args
 }
 
+fn preview_args(app: &AppWindow, book_id: String) -> Vec<String> {
+    vec![
+        "bridge".into(),
+        "book-preview".into(),
+        book_id,
+        "--library".into(),
+        app.get_library_path().to_string(),
+    ]
+}
+
+fn select_book_id(
+    app: &AppWindow,
+    book_ids: &Arc<Mutex<Vec<String>>>,
+    book_index: &Arc<Mutex<usize>>,
+    delta: isize,
+) -> Option<String> {
+    let ids = book_ids.lock().expect("book ids lock");
+    if ids.is_empty() {
+        return None;
+    }
+    let current = app.get_book_id().to_string();
+    let fallback = *book_index.lock().expect("book index lock");
+    let current_index = ids.iter().position(|id| id == &current).unwrap_or(fallback);
+    let max = ids.len().saturating_sub(1) as isize;
+    let next_index = (current_index as isize + delta).clamp(0, max) as usize;
+    *book_index.lock().expect("book index lock") = next_index;
+    ids.get(next_index).cloned()
+}
+
 fn audio_cpp_health_args(app: &AppWindow) -> Vec<String> {
     let mut args = vec!["bridge".into(), "audio-cpp-health".into()];
     args.extend([
@@ -1852,6 +1951,8 @@ fn job_progress_detail(value: &Value) -> String {
 fn handle_bridge_events(
     weak: slint::Weak<AppWindow>,
     jobs: Arc<Mutex<Vec<JobState>>>,
+    book_ids: Arc<Mutex<Vec<String>>>,
+    book_index: Arc<Mutex<usize>>,
     job_id: u64,
     stdout: &str,
 ) {
@@ -2144,6 +2245,22 @@ fn handle_bridge_events(
                 );
             }
             Some("books") => {
+                let loaded_ids = value
+                    .get("books")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|book| book.get("id").and_then(Value::as_str))
+                            .map(str::to_string)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let loaded_count = loaded_ids.len();
+                {
+                    *book_ids.lock().expect("book ids lock") = loaded_ids;
+                    *book_index.lock().expect("book index lock") = 0;
+                }
                 let books = value
                     .get("books")
                     .and_then(Value::as_array)
@@ -2173,6 +2290,10 @@ fn handle_bridge_events(
                     set_book_id_if_empty(weak.clone(), first_id);
                 }
                 set_books(weak.clone(), &books);
+                set_book_selection(
+                    weak.clone(),
+                    &format!("{loaded_count} books loaded. Use Previous/Next Book to switch without copying IDs."),
+                );
                 set_guide(
                     weak.clone(),
                     "Books loaded. First book id is selected automatically if the field was empty.",
@@ -2399,6 +2520,15 @@ fn set_books(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_books_text(text.into());
+        }
+    });
+}
+
+fn set_book_selection(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_book_selection_text(text.into());
         }
     });
 }
