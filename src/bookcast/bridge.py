@@ -230,9 +230,11 @@ def podcast_render(
             rate=rate,
             progress_callback=lambda payload: emit("job_progress", job="podcast_render", **payload),
         )
+        outputs_payload = library.list_outputs(book_id)
     finally:
         library.close()
     emit("podcast_script", script=script.to_dict(), output=str(output))
+    emit("outputs", outputs=outputs_payload)
     emit("job_progress", job="podcast_render", progress=100)
     emit("job_done", job="podcast_render", output=str(output), count=len(script.turns))
     return 0
@@ -371,7 +373,9 @@ def render_book(
             ffmpeg=ffmpeg,
             progress_callback=lambda payload: emit("job_progress", job="render", **payload),
         )
+        outputs_payload = library.list_outputs(book_id)
         emit("job_progress", job="render", progress=100)
+        emit("outputs", outputs=outputs_payload)
         emit("job_done", job="render", output=str(output))
     finally:
         library.close()

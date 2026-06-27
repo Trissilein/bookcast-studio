@@ -25,6 +25,7 @@ export component AppWindow inherits Window {
     in-out property <string> voice-list-text: "Discover voices before choosing one.";
     in-out property <string> output-format: "opus";
     in-out property <string> last-output-path: "";
+    in-out property <string> output-list-text: "No outputs loaded.";
     in-out property <string> audio-cpp-exe: "";
     in-out property <string> audio-cpp-model: "";
     in-out property <string> audio-cpp-backend: "cpu";
@@ -61,6 +62,7 @@ export component AppWindow inherits Window {
     callback podcast-script();
     callback podcast-render();
     callback discover-voices();
+    callback load-outputs();
     callback open-output();
     callback refresh-audio-cpp();
     callback cancel-job();
@@ -211,7 +213,14 @@ export component AppWindow inherits Window {
                             Button { text: "Add Render Job"; clicked => { root.render-book(); } }
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
                             Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            Text {
+                                text: root.output-list-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
 
                             Text { text: "Preview"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text {
@@ -312,7 +321,14 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
                             Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            Text {
+                                text: root.output-list-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                         }
                     }
 
@@ -398,7 +414,14 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
+                            Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
                             Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            Text {
+                                text: root.output-list-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                         }
                     }
 
@@ -661,6 +684,18 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             voice_state.clone(),
             "voices",
             voice_args(&app),
+        );
+    });
+
+    let weak = app.as_weak();
+    let outputs_state = state.clone();
+    app.on_load_outputs(move || {
+        let Some(app) = weak.upgrade() else { return };
+        run_bridge(
+            app.as_weak(),
+            outputs_state.clone(),
+            "outputs",
+            outputs_args(&app),
         );
     });
 
@@ -1378,6 +1413,20 @@ fn voice_args(app: &AppWindow) -> Vec<String> {
     args
 }
 
+fn outputs_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        "outputs".into(),
+        "--library".into(),
+        app.get_library_path().to_string(),
+    ];
+    let book_id = app.get_book_id().to_string();
+    if !book_id.trim().is_empty() {
+        args.extend(["--book-id".into(), book_id]);
+    }
+    args
+}
+
 fn audio_cpp_health_args(app: &AppWindow) -> Vec<String> {
     let mut args = vec!["bridge".into(), "audio-cpp-health".into()];
     args.extend([
@@ -1730,6 +1779,29 @@ fn handle_bridge_events(
                 }
             }
             Some("outputs") => {
+                let outputs_text = value
+                    .get("outputs")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(12)
+                            .map(|output| {
+                                let format =
+                                    output.get("format").and_then(Value::as_str).unwrap_or("");
+                                let created = output
+                                    .get("created_at")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("");
+                                let path = output.get("path").and_then(Value::as_str).unwrap_or("");
+                                format!("{format} | {created} | {path}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No outputs for this book yet.".to_string());
+                set_output_list(weak.clone(), &outputs_text);
                 if let Some(path) = value
                     .get("outputs")
                     .and_then(Value::as_array)
@@ -1740,7 +1812,7 @@ fn handle_bridge_events(
                     set_last_output(weak.clone(), path);
                     set_guide(
                         weak.clone(),
-                        "Last output loaded. Open Output will open its folder.",
+                        "Outputs loaded. Open Output will open the newest output folder.",
                     );
                 }
             }
@@ -2089,6 +2161,15 @@ fn set_last_output(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_last_output_path(text.into());
+        }
+    });
+}
+
+fn set_output_list(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_output_list_text(text.into());
         }
     });
 }
