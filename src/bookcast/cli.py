@@ -127,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
 
     bridge_list = bridge_sub.add_parser("list", help="Emit imported books as JSONL")
     bridge_list.add_argument("--library", type=Path, required=True)
+    bridge_list.add_argument("--preview-first", action="store_true")
 
     bridge_outputs = bridge_sub.add_parser("outputs", help="Emit rendered outputs as JSONL")
     bridge_outputs.add_argument("--library", type=Path, required=True)
@@ -249,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_family,
             )
         if args.bridge_command == "list":
-            return bridge.run_safely(bridge.list_books, args.library)
+            return bridge.run_safely(bridge.list_books, args.library, args.preview_first)
         if args.bridge_command == "outputs":
             return bridge.run_safely(bridge.outputs, args.library, args.book_id)
         if args.bridge_command == "book-preview":

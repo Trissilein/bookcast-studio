@@ -110,10 +110,13 @@ def audio_cpp_health(
     return 0 if healthy else 1
 
 
-def list_books(library_root: Path) -> int:
+def list_books(library_root: Path, preview_first: bool = False) -> int:
     library = BookLibrary(library_root)
     try:
-        emit("books", books=library.list_books())
+        books = library.list_books()
+        emit("books", books=books)
+        if preview_first and books:
+            emit("book_preview", **_book_preview_payload(library, str(books[0]["id"])))
     finally:
         library.close()
     return 0

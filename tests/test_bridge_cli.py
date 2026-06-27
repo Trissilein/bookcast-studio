@@ -33,6 +33,13 @@ def test_bridge_import_and_list_emit_jsonl(tmp_path: Path, capsys) -> None:
     assert list_events[0]["event"] == "books"
     assert list_events[0]["books"][0]["title"] == "Bridge Book"
 
+    result = main(["bridge", "list", "--library", str(library_root), "--preview-first"])
+    preview_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in preview_events] == ["books", "book_preview"]
+    assert preview_events[1]["book"]["title"] == "Bridge Book"
+
 
 def test_bridge_errors_are_structured(tmp_path: Path, capsys) -> None:
     result = main(["bridge", "import", str(tmp_path / "missing.epub"), "--library", str(tmp_path / "library")])

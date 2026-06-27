@@ -574,7 +574,13 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.as_weak(),
             list_state.clone(),
             "list",
-            vec!["bridge".into(), "list".into(), "--library".into(), library],
+            vec![
+                "bridge".into(),
+                "list".into(),
+                "--library".into(),
+                library,
+                "--preview-first".into(),
+            ],
         );
     });
 

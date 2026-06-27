@@ -52,6 +52,8 @@ Render jobs emit chunk/turn-level progress for TTS and assembly so the queue can
 show where long audiobook or podcast renders currently are.
 Imports emit the first book preview automatically and the Rust workbench switches
 back to TTS Studio, reducing manual book-id copy/paste after file or Calibre import.
+`Refresh Books` in the Rust workbench also asks the bridge for a first-book
+preview, so reopening a library lands on a renderable book faster.
 
 Python fallback UI:
 
