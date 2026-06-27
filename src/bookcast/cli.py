@@ -133,6 +133,14 @@ def main(argv: list[str] | None = None) -> int:
     bridge_outputs.add_argument("--library", type=Path, required=True)
     bridge_outputs.add_argument("--book-id", default=None)
 
+    bridge_cleanup_profiles = bridge_sub.add_parser("cleanup-profiles", help="Emit cleanup profiles as JSONL")
+    bridge_cleanup_profiles.add_argument("--library", type=Path, required=True)
+
+    bridge_set_cleanup = bridge_sub.add_parser("set-cleanup-profile", help="Set cleanup profile and rechunk a book")
+    bridge_set_cleanup.add_argument("book_id")
+    bridge_set_cleanup.add_argument("--library", type=Path, required=True)
+    bridge_set_cleanup.add_argument("--cleanup-profile", required=True)
+
     bridge_preview = bridge_sub.add_parser("book-preview", help="Emit book chapters, chunks and text preview as JSONL")
     bridge_preview.add_argument("book_id")
     bridge_preview.add_argument("--library", type=Path, required=True)
@@ -253,6 +261,15 @@ def main(argv: list[str] | None = None) -> int:
             return bridge.run_safely(bridge.list_books, args.library, args.preview_first)
         if args.bridge_command == "outputs":
             return bridge.run_safely(bridge.outputs, args.library, args.book_id)
+        if args.bridge_command == "cleanup-profiles":
+            return bridge.run_safely(bridge.cleanup_profiles, args.library)
+        if args.bridge_command == "set-cleanup-profile":
+            return bridge.run_safely(
+                bridge.set_cleanup_profile,
+                args.library,
+                args.book_id,
+                args.cleanup_profile,
+            )
         if args.bridge_command == "book-preview":
             return bridge.run_safely(bridge.book_preview, args.library, args.book_id, args.max_chars)
         if args.bridge_command == "characters":

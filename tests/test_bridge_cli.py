@@ -5,6 +5,7 @@ from pathlib import Path
 
 from bookcast.calibre import CalibreBook
 from bookcast.cli import main
+from bookcast.library import BookLibrary
 from bookcast.tts import TtsProvider, TtsVoice
 
 
@@ -62,6 +63,54 @@ def test_bridge_import_folder_imports_supported_files(tmp_path: Path, capsys) ->
     assert [event["event"] for event in events].count("source_imported") == 2
     assert events[-2]["count"] == 2
     assert events[-1]["event"] == "book_preview"
+
+
+def test_bridge_cleanup_profiles_and_rechunk(tmp_path: Path, capsys) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Cleanup Book.txt"
+    source.write_text("One. Two. Three. Four.", encoding="utf-8")
+
+    main(["bridge", "import", str(source), "--library", str(library_root)])
+    book_id = str(
+        next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done")
+    )
+
+    library = BookLibrary(library_root)
+    try:
+        library.upsert_cleanup_profile("tiny", {"max_chars": 8})
+    finally:
+        library.close()
+
+    result = main(["bridge", "cleanup-profiles", "--library", str(library_root)])
+    profile_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert profile_events[0]["event"] == "cleanup_profiles"
+    assert any(profile["name"] == "tiny" for profile in profile_events[0]["profiles"])
+
+    result = main(
+        [
+            "bridge",
+            "set-cleanup-profile",
+            book_id,
+            "--library",
+            str(library_root),
+            "--cleanup-profile",
+            "tiny",
+        ]
+    )
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in events] == [
+        "job_started",
+        "job_progress",
+        "job_done",
+        "book_preview",
+    ]
+    assert events[-2]["book"]["cleanup_profile"] == "tiny"
+    assert events[-1]["book"]["cleanup_profile"] == "tiny"
+    assert events[-1]["chunk_count"] >= 1
 
 
 def test_bridge_errors_are_structured(tmp_path: Path, capsys) -> None:

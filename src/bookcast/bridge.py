@@ -132,6 +132,30 @@ def outputs(library_root: Path, book_id: str | None = None) -> int:
     return 0
 
 
+def cleanup_profiles(library_root: Path) -> int:
+    library = BookLibrary(library_root)
+    try:
+        profiles = library.list_cleanup_profiles() or [library.get_cleanup_profile("standard")]
+        emit("cleanup_profiles", profiles=profiles)
+    finally:
+        library.close()
+    return 0
+
+
+def set_cleanup_profile(library_root: Path, book_id: str, cleanup_profile: str) -> int:
+    emit("job_started", job="cleanup", book_id=book_id, cleanup_profile=cleanup_profile)
+    library = BookLibrary(library_root)
+    try:
+        library.set_book_cleanup_profile(book_id, cleanup_profile)
+        book = library.get_book(book_id)
+        emit("job_progress", job="cleanup", progress=100)
+        emit("job_done", job="cleanup", book_id=book_id, book=book)
+        emit("book_preview", **_book_preview_payload(library, book_id))
+    finally:
+        library.close()
+    return 0
+
+
 def book_preview(library_root: Path, book_id: str, max_chars: int = 1400) -> int:
     library = BookLibrary(library_root)
     try:

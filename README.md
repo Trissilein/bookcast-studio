@@ -59,6 +59,8 @@ fresh output lists automatically and `Refresh Outputs` reloads them on demand.
 TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
 shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.
+The Library view can load cleanup profiles and apply one to the selected book;
+that rechunks the book and refreshes the preview before rendering.
 
 Python fallback UI:
 
@@ -91,6 +93,8 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
 .\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
+.\.venv\Scripts\bookcast bridge cleanup-profiles --library .\library
+.\.venv\Scripts\bookcast bridge set-cleanup-profile <book-id> --library .\library --cleanup-profile standard
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator

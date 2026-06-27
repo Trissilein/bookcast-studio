@@ -37,6 +37,8 @@ export component AppWindow inherits Window {
     in-out property <string> diagnostic-text: "Run diagnostics before importing.";
     in-out property <string> books-text: "No books loaded.";
     in-out property <string> book-preview-text: "Select or import a book, then load preview.";
+    in-out property <string> cleanup-profile-name: "standard";
+    in-out property <string> cleanup-profiles-text: "Load cleanup profiles before changing chunking.";
     in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
@@ -57,6 +59,8 @@ export component AppWindow inherits Window {
     callback scan-calibre();
     callback import-calibre();
     callback load-preview();
+    callback load-cleanup-profiles();
+    callback apply-cleanup-profile();
     callback sample-render();
     callback render-book();
     callback suggest-characters();
@@ -325,6 +329,19 @@ export component AppWindow inherits Window {
                             Text { text: "Book id"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.book-id; }
                             Button { text: "Load Preview"; clicked => { root.load-preview(); } }
+                            Text { text: "Cleanup profile"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.cleanup-profile-name; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Load Cleanup Profiles"; clicked => { root.load-cleanup-profiles(); } }
+                                Button { text: "Apply + Rechunk"; clicked => { root.apply-cleanup-profile(); } }
+                            }
+                            Text {
+                                text: root.cleanup-profiles-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                             Text {
                                 text: root.book-preview-text;
                                 color: rgb(70, 80, 74);
@@ -725,6 +742,53 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             outputs_state.clone(),
             "outputs",
             outputs_args(&app),
+        );
+    });
+
+    let weak = app.as_weak();
+    let cleanup_profiles_state = state.clone();
+    app.on_load_cleanup_profiles(move || {
+        let Some(app) = weak.upgrade() else { return };
+        run_bridge(
+            app.as_weak(),
+            cleanup_profiles_state.clone(),
+            "cleanup profiles",
+            vec![
+                "bridge".into(),
+                "cleanup-profiles".into(),
+                "--library".into(),
+                app.get_library_path().to_string(),
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let cleanup_state = state.clone();
+    app.on_apply_cleanup_profile(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        let profile = app.get_cleanup_profile_name().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Cleanup needs a book id.".into());
+            return;
+        }
+        if profile.trim().is_empty() {
+            app.set_status_text("Cleanup needs a profile name.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            cleanup_state.clone(),
+            "cleanup",
+            vec![
+                "bridge".into(),
+                "set-cleanup-profile".into(),
+                book_id,
+                "--library".into(),
+                app.get_library_path().to_string(),
+                "--cleanup-profile".into(),
+                profile,
+            ],
         );
     });
 
@@ -1763,6 +1827,44 @@ fn handle_bridge_events(
                     set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
                 }
             }
+            Some("cleanup_profiles") => {
+                let profiles = value
+                    .get("profiles")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .map(|profile| {
+                                let name = profile
+                                    .get("name")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("standard");
+                                let config = profile
+                                    .get("config_json")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("{}");
+                                format!("{name} | {config}")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No cleanup profiles returned.".to_string());
+                if let Some(first_name) = value
+                    .get("profiles")
+                    .and_then(Value::as_array)
+                    .and_then(|items| items.first())
+                    .and_then(|profile| profile.get("name"))
+                    .and_then(Value::as_str)
+                {
+                    set_cleanup_profile_name(weak.clone(), first_name);
+                }
+                set_cleanup_profiles(weak.clone(), &profiles);
+                set_guide(
+                    weak.clone(),
+                    "Cleanup profiles loaded. Pick one, then Apply + Rechunk.",
+                );
+            }
             Some("calibre_diagnostic") => {
                 let healthy = value
                     .get("healthy")
@@ -1922,6 +2024,9 @@ fn handle_bridge_events(
                 let book = value.get("book").unwrap_or(&Value::Null);
                 let title = book.get("title").and_then(Value::as_str).unwrap_or("");
                 let author = book.get("author").and_then(Value::as_str).unwrap_or("");
+                if let Some(profile) = book.get("cleanup_profile").and_then(Value::as_str) {
+                    set_cleanup_profile_name(weak.clone(), profile);
+                }
                 let chunk_count = value
                     .get("chunk_count")
                     .and_then(Value::as_i64)
@@ -2145,6 +2250,24 @@ fn set_book_preview(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_book_preview_text(text.into());
+        }
+    });
+}
+
+fn set_cleanup_profiles(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_cleanup_profiles_text(text.into());
+        }
+    });
+}
+
+fn set_cleanup_profile_name(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_cleanup_profile_name(text.into());
         }
     });
 }
