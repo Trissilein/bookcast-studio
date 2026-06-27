@@ -66,6 +66,34 @@ def test_render_book_marks_chunks_and_outputs(tmp_path: Path, monkeypatch) -> No
     assert all(Path(chunk["audio_path"]).exists() for chunk in chunks)
 
 
+def test_render_book_cache_key_includes_voice(tmp_path: Path, monkeypatch) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Voice Cache.txt"
+    source.write_text("One reusable chunk.", encoding="utf-8")
+
+    def fake_assemble(chunk_wavs, output_path, output_format, ffmpeg="ffmpeg", chapters=None):
+        output_path.write_bytes(b"audio")
+        return output_path
+
+    monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    provider = _RecordingTtsProvider()
+
+    library = BookLibrary(library_root)
+    try:
+        book_id = library.import_source(source)
+        library.render_book(book_id, provider=provider, voice="Voice A", output_format="opus")
+        first_path = Path(str(library.get_chunks(book_id)[0]["audio_path"]))
+        library.render_book(book_id, provider=provider, voice="Voice B", output_format="opus")
+        second_path = Path(str(library.get_chunks(book_id)[0]["audio_path"]))
+    finally:
+        library.close()
+
+    assert len(provider.calls) == 2
+    assert first_path != second_path
+    assert first_path.exists()
+    assert second_path.exists()
+
+
 def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Audio Book.txt"

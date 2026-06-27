@@ -547,10 +547,14 @@ class BookLibrary:
         chapter_rows = self.get_chapters(book_id)
         chapter_titles = {int(row["chapter_index"]): str(row["title"]) for row in chapter_rows}
         chunk_dir = self.root / "books" / book_id / "audio_chunks"
+        render_key = safe_name(f"{provider.id}_{voice or 'default'}_rate{rate}")[:80]
         rendered: list[Path] = []
         rendered_meta: list[tuple[int, Path]] = []
         for chunk in chunks:
-            out_wav = chunk_dir / f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_{chunk['text_hash'][:12]}.wav"
+            out_wav = chunk_dir / (
+                f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_"
+                f"{chunk['text_hash'][:12]}_{render_key}.wav"
+            )
             if not out_wav.exists() or out_wav.stat().st_size == 0:
                 provider.synthesize(str(chunk["text"]), out_wav, voice=voice, rate=rate)
                 self._mark_chunk_rendered(str(chunk["id"]), out_wav)
@@ -607,7 +611,8 @@ class BookLibrary:
         chapter_marks: list[tuple[str, float]] = []
         for index, turn in enumerate(script.turns):
             voice_name = voice_by_speaker.get(turn.speaker) or default_voice
-            out_wav = chunk_dir / f"t{index:04d}_{safe_name(turn.speaker)}.wav"
+            render_key = safe_name(f"{provider.id}_{voice_name or 'default'}_rate{rate}")[:80]
+            out_wav = chunk_dir / f"t{index:04d}_{safe_name(turn.speaker)}_{render_key}.wav"
             if not out_wav.exists() or out_wav.stat().st_size == 0:
                 provider.synthesize(turn.text, out_wav, voice=voice_name, rate=rate)
             rendered.append(out_wav)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -162,6 +163,68 @@ class AudioCppProvider(TtsProvider):
             raise RuntimeError(f"audio.cpp synthesis failed: {detail}")
         if not output_wav.exists() or output_wav.stat().st_size == 0:
             raise RuntimeError(f"audio.cpp produced no audio: {output_wav}")
+
+
+class PiperProvider(TtsProvider):
+    id = "piper"
+
+    def __init__(self, executable: str, *, voice_dir: str | None = None, model: str | None = None) -> None:
+        self.executable = executable
+        self.voice_dir = Path(voice_dir) if voice_dir else None
+        self.model = model
+
+    def health(self) -> bool:
+        try:
+            proc = subprocess.run(
+                [self.executable, "--help"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            return False
+        return proc.returncode == 0
+
+    def list_voices(self) -> list[TtsVoice]:
+        if not self.voice_dir or not self.voice_dir.exists():
+            return []
+        voices: list[TtsVoice] = []
+        for model_path in sorted(self.voice_dir.glob("*.onnx")):
+            label = model_path.stem
+            locale = None
+            config_path = model_path.with_suffix(model_path.suffix + ".json")
+            if config_path.exists():
+                try:
+                    data = json.loads(config_path.read_text(encoding="utf-8"))
+                    language = data.get("language") or {}
+                    locale = language.get("code")
+                    dataset = data.get("dataset")
+                    if locale and dataset:
+                        label = f"{locale} {dataset}"
+                except (OSError, json.JSONDecodeError):
+                    pass
+            voices.append(TtsVoice(id=str(model_path), label=label, locale=locale))
+        return voices
+
+    def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
+        model = voice or self.model
+        if not model:
+            voices = self.list_voices()
+            model = voices[0].id if voices else None
+        if not model:
+            raise RuntimeError("Piper model is required")
+        model_path = Path(model)
+        if not model_path.exists():
+            raise RuntimeError(f"Piper model not found: {model}")
+        output_wav = Path(output_wav)
+        output_wav.parent.mkdir(parents=True, exist_ok=True)
+        args = [self.executable, "-m", str(model_path), "-f", str(output_wav), "-q"]
+        proc = subprocess.run(args, input=text, check=False, capture_output=True, text=True)
+        if proc.returncode != 0:
+            detail = proc.stderr.strip() or proc.stdout.strip()
+            raise RuntimeError(f"Piper synthesis failed: {detail}")
+        if not output_wav.exists() or output_wav.stat().st_size == 0:
+            raise RuntimeError(f"Piper produced no audio: {output_wav}")
 
 
 def play_wav(path: Path, powershell: str = "powershell") -> None:

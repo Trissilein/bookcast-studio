@@ -9,6 +9,10 @@ import tempfile
 from pathlib import Path
 
 
+DEFAULT_PIPER_EXE = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe")
+DEFAULT_PIPER_VOICE_DIR = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run BookCast end-to-end acceptance smoke.")
     parser.add_argument("--library", type=Path, default=None)
@@ -65,6 +69,45 @@ def main() -> int:
             outputs = run_bridge(repo, ["outputs", "--library", str(library), "--book-id", book_id])
             assert_event(outputs, "outputs")
             require(outputs[0].get("outputs"), "Outputs list is empty after render")
+
+            if DEFAULT_PIPER_EXE.exists() and DEFAULT_PIPER_VOICE_DIR.exists():
+                piper_voices = run_bridge(
+                    repo,
+                    [
+                        "voices",
+                        "--provider",
+                        "piper",
+                        "--piper-exe",
+                        str(DEFAULT_PIPER_EXE),
+                        "--piper-voice-dir",
+                        str(DEFAULT_PIPER_VOICE_DIR),
+                    ],
+                )
+                assert_event(piper_voices, "voices")
+                require(piper_voices[0].get("voices"), "No Piper voices discovered")
+                piper_voice = str(piper_voices[0]["voices"][0]["id"])
+                piper_sample = run_bridge(
+                    repo,
+                    [
+                        "sample-render",
+                        book_id,
+                        "--library",
+                        str(library),
+                        "--format",
+                        "opus",
+                        "--provider",
+                        "piper",
+                        "--piper-exe",
+                        str(DEFAULT_PIPER_EXE),
+                        "--piper-voice-dir",
+                        str(DEFAULT_PIPER_VOICE_DIR),
+                        "--voice",
+                        piper_voice,
+                    ],
+                )
+                assert_event(piper_sample, "job_done")
+                piper_path = Path(str(piper_sample[-1]["output"]))
+                require(piper_path.exists(), f"Piper sample output missing: {piper_path}")
 
         print(json.dumps({"ok": True, "library": str(library), "book_id": book_id}, indent=2))
         return 0

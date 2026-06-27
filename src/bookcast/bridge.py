@@ -11,7 +11,11 @@ from .characters import suggest_characters as generate_character_suggestions
 from .library import BookLibrary
 from .llm import OllamaProvider
 from .podcast import generate_podcast_script
-from .tts import AudioCppProvider, TtsProvider, WindowsSapiProvider
+from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvider
+
+
+DEFAULT_PIPER_EXE = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe")
+DEFAULT_PIPER_VOICE_DIR = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices")
 
 
 def emit(event: str, **payload: Any) -> None:
@@ -20,6 +24,7 @@ def emit(event: str, **payload: Any) -> None:
 
 def diagnose(library_root: Path) -> int:
     tts = WindowsSapiProvider()
+    piper = PiperProvider(str(DEFAULT_PIPER_EXE), voice_dir=str(DEFAULT_PIPER_VOICE_DIR))
     emit(
         "diagnostic",
         library=str(library_root),
@@ -27,6 +32,9 @@ def diagnose(library_root: Path) -> int:
         ffprobe=shutil.which("ffprobe"),
         calibredb=find_calibredb(),
         windows_sapi=tts.health(),
+        piper=piper.health() if DEFAULT_PIPER_EXE.exists() else False,
+        piper_executable=str(DEFAULT_PIPER_EXE) if DEFAULT_PIPER_EXE.exists() else "",
+        piper_voice_dir=str(DEFAULT_PIPER_VOICE_DIR) if DEFAULT_PIPER_VOICE_DIR.exists() else "",
     )
     return 0
 
@@ -37,6 +45,9 @@ def voices(
     audio_cpp_model: str | None = None,
     audio_cpp_backend: str = "cpu",
     audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
 ) -> int:
     tts_provider = _tts_provider(
         provider,
@@ -44,6 +55,9 @@ def voices(
         audio_cpp_model=audio_cpp_model,
         audio_cpp_backend=audio_cpp_backend,
         audio_cpp_family=audio_cpp_family,
+        piper_exe=piper_exe,
+        piper_voice_dir=piper_voice_dir,
+        piper_model=piper_model,
     )
     emit(
         "voices",
@@ -200,6 +214,9 @@ def podcast_render(
     audio_cpp_model: str | None = None,
     audio_cpp_backend: str = "cpu",
     audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
 ) -> int:
     emit("job_started", job="podcast_render", book_id=book_id, mode=mode, format=output_format, provider=provider)
     text = _book_text(library_root, book_id)
@@ -214,6 +231,9 @@ def podcast_render(
         audio_cpp_model=audio_cpp_model,
         audio_cpp_backend=audio_cpp_backend,
         audio_cpp_family=audio_cpp_family,
+        piper_exe=piper_exe,
+        piper_voice_dir=piper_voice_dir,
+        piper_model=piper_model,
     )
     library = BookLibrary(library_root)
     try:
@@ -322,6 +342,9 @@ def render_book(
     audio_cpp_model: str | None = None,
     audio_cpp_backend: str = "cpu",
     audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
 ) -> int:
     emit("job_started", job="render", book_id=book_id, format=output_format, provider=provider)
     library = BookLibrary(library_root)
@@ -334,6 +357,9 @@ def render_book(
             audio_cpp_model=audio_cpp_model,
             audio_cpp_backend=audio_cpp_backend,
             audio_cpp_family=audio_cpp_family,
+            piper_exe=piper_exe,
+            piper_voice_dir=piper_voice_dir,
+            piper_model=piper_model,
         )
         output = library.render_book(
             book_id,
@@ -363,6 +389,9 @@ def sample_render(
     audio_cpp_model: str | None = None,
     audio_cpp_backend: str = "cpu",
     audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
 ) -> int:
     emit("job_started", job="sample_render", book_id=book_id, format=output_format, provider=provider)
     return render_book(
@@ -378,6 +407,9 @@ def sample_render(
         audio_cpp_model=audio_cpp_model,
         audio_cpp_backend=audio_cpp_backend,
         audio_cpp_family=audio_cpp_family,
+        piper_exe=piper_exe,
+        piper_voice_dir=piper_voice_dir,
+        piper_model=piper_model,
     )
 
 
@@ -388,6 +420,9 @@ def _tts_provider(
     audio_cpp_model: str | None,
     audio_cpp_backend: str,
     audio_cpp_family: str | None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
 ) -> TtsProvider:
     if provider == "audio_cpp":
         if not audio_cpp_exe:
@@ -400,6 +435,12 @@ def _tts_provider(
             backend=audio_cpp_backend,
             family=audio_cpp_family,
         )
+    if provider == "piper":
+        executable = piper_exe or (str(DEFAULT_PIPER_EXE) if DEFAULT_PIPER_EXE.exists() else None)
+        voice_dir = piper_voice_dir or (str(DEFAULT_PIPER_VOICE_DIR) if DEFAULT_PIPER_VOICE_DIR.exists() else None)
+        if not executable:
+            raise RuntimeError("Piper executable is required")
+        return PiperProvider(executable, voice_dir=voice_dir, model=piper_model)
     return WindowsSapiProvider()
 
 

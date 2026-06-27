@@ -11,7 +11,7 @@ from .characters import suggest_characters
 from .library import BookLibrary, safe_name
 from .llm import OllamaProvider
 from .podcast import PODCAST_MODES, PodcastTurn, generate_interactive_step, generate_podcast_script
-from .tts import AudioCppProvider, WindowsSapiProvider, play_wav
+from .tts import AudioCppProvider, PiperProvider, WindowsSapiProvider, play_wav
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,11 +34,14 @@ def main(argv: list[str] | None = None) -> int:
     render_parser.add_argument("--rate", type=int, default=0)
     render_parser.add_argument("--limit", type=int, default=None, help="Render only the first N chunks")
     render_parser.add_argument("--ffmpeg", default="ffmpeg")
-    render_parser.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    render_parser.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     render_parser.add_argument("--audio-cpp-exe", default=None)
     render_parser.add_argument("--audio-cpp-model", default=None)
     render_parser.add_argument("--audio-cpp-backend", default="cpu")
     render_parser.add_argument("--audio-cpp-family", default=None)
+    render_parser.add_argument("--piper-exe", default=None)
+    render_parser.add_argument("--piper-voice-dir", default=None)
+    render_parser.add_argument("--piper-model", default=None)
 
     characters_parser = sub.add_parser("characters", help="LLM-assisted character tools")
     characters_sub = characters_parser.add_subparsers(dest="characters_command", required=True)
@@ -107,11 +110,14 @@ def main(argv: list[str] | None = None) -> int:
     bridge_diagnose.add_argument("--library", type=Path, required=True)
 
     bridge_voices = bridge_sub.add_parser("voices", help="Emit TTS voices as JSONL")
-    bridge_voices.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_voices.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_voices.add_argument("--audio-cpp-exe", default=None)
     bridge_voices.add_argument("--audio-cpp-model", default=None)
     bridge_voices.add_argument("--audio-cpp-backend", default="cpu")
     bridge_voices.add_argument("--audio-cpp-family", default=None)
+    bridge_voices.add_argument("--piper-exe", default=None)
+    bridge_voices.add_argument("--piper-voice-dir", default=None)
+    bridge_voices.add_argument("--piper-model", default=None)
 
     bridge_audio_cpp = bridge_sub.add_parser("audio-cpp-health", help="Validate local audio.cpp configuration")
     bridge_audio_cpp.add_argument("--audio-cpp-exe", default=None)
@@ -154,11 +160,14 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--ffmpeg", default="ffmpeg")
     bridge_podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     bridge_podcast_render.add_argument("--model", default="qwen3:8b")
-    bridge_podcast_render.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_podcast_render.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_podcast_render.add_argument("--audio-cpp-exe", default=None)
     bridge_podcast_render.add_argument("--audio-cpp-model", default=None)
     bridge_podcast_render.add_argument("--audio-cpp-backend", default="cpu")
     bridge_podcast_render.add_argument("--audio-cpp-family", default=None)
+    bridge_podcast_render.add_argument("--piper-exe", default=None)
+    bridge_podcast_render.add_argument("--piper-voice-dir", default=None)
+    bridge_podcast_render.add_argument("--piper-model", default=None)
 
     bridge_import = bridge_sub.add_parser("import", help="Import a source and emit JSONL job events")
     bridge_import.add_argument("file", type=Path)
@@ -186,11 +195,14 @@ def main(argv: list[str] | None = None) -> int:
     bridge_render.add_argument("--rate", type=int, default=0)
     bridge_render.add_argument("--limit", type=int, default=None)
     bridge_render.add_argument("--ffmpeg", default="ffmpeg")
-    bridge_render.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_render.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_render.add_argument("--audio-cpp-exe", default=None)
     bridge_render.add_argument("--audio-cpp-model", default=None)
     bridge_render.add_argument("--audio-cpp-backend", default="cpu")
     bridge_render.add_argument("--audio-cpp-family", default=None)
+    bridge_render.add_argument("--piper-exe", default=None)
+    bridge_render.add_argument("--piper-voice-dir", default=None)
+    bridge_render.add_argument("--piper-model", default=None)
 
     bridge_sample = bridge_sub.add_parser("sample-render", help="Render the first chunk and emit JSONL job events")
     bridge_sample.add_argument("book_id")
@@ -199,11 +211,14 @@ def main(argv: list[str] | None = None) -> int:
     bridge_sample.add_argument("--voice", default=None)
     bridge_sample.add_argument("--rate", type=int, default=0)
     bridge_sample.add_argument("--ffmpeg", default="ffmpeg")
-    bridge_sample.add_argument("--provider", choices=["windows_sapi", "audio_cpp"], default="windows_sapi")
+    bridge_sample.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_sample.add_argument("--audio-cpp-exe", default=None)
     bridge_sample.add_argument("--audio-cpp-model", default=None)
     bridge_sample.add_argument("--audio-cpp-backend", default="cpu")
     bridge_sample.add_argument("--audio-cpp-family", default=None)
+    bridge_sample.add_argument("--piper-exe", default=None)
+    bridge_sample.add_argument("--piper-voice-dir", default=None)
+    bridge_sample.add_argument("--piper-model", default=None)
 
     args = parser.parse_args(argv)
     if args.command == "bridge":
@@ -217,6 +232,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_model,
                 args.audio_cpp_backend,
                 args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
             )
         if args.bridge_command == "audio-cpp-health":
             return bridge.run_safely(
@@ -260,6 +278,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_model,
                 args.audio_cpp_backend,
                 args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
             )
         if args.bridge_command == "import":
             return bridge.run_safely(bridge.import_file, args.library, args.file, args.cleanup_profile)
@@ -290,6 +311,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_model,
                 args.audio_cpp_backend,
                 args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
             )
         if args.bridge_command == "sample-render":
             return bridge.run_safely(
@@ -305,6 +329,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_model,
                 args.audio_cpp_backend,
                 args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
             )
 
     if args.command == "import":
@@ -451,7 +478,7 @@ def _parse_voice_map(entries: list[str]) -> dict[str, str]:
     return mapping
 
 
-def _build_tts_provider(args) -> WindowsSapiProvider | AudioCppProvider:
+def _build_tts_provider(args) -> WindowsSapiProvider | AudioCppProvider | PiperProvider:
     if getattr(args, "provider", "windows_sapi") == "audio_cpp":
         if not args.audio_cpp_exe:
             raise SystemExit("--audio-cpp-exe is required for --provider audio_cpp")
@@ -462,6 +489,12 @@ def _build_tts_provider(args) -> WindowsSapiProvider | AudioCppProvider:
             model=args.audio_cpp_model,
             backend=args.audio_cpp_backend,
             family=args.audio_cpp_family,
+        )
+    if getattr(args, "provider", "windows_sapi") == "piper":
+        return PiperProvider(
+            args.piper_exe or str(bridge.DEFAULT_PIPER_EXE),
+            voice_dir=args.piper_voice_dir or str(bridge.DEFAULT_PIPER_VOICE_DIR),
+            model=args.piper_model,
         )
     return WindowsSapiProvider()
 

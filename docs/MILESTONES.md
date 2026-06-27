@@ -29,7 +29,9 @@
 ## M3 Audiobook Render
 
 - Add TTS provider interface implementation. Windows SAPI baseline done.
+- Add locally validated Piper provider using existing Trispr-Flow Piper binary/voices. Done.
 - Render resumable chunks. Done.
+- Include provider, voice, and rate in render cache keys so engine changes do not reuse stale WAVs. Done.
 - Assemble Opus, MP3, WAV, and M4B with ffmpeg. Done.
 - Add chaptered export. Done.
 

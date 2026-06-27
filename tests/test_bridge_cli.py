@@ -222,6 +222,39 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
     assert events[0]["issues"] == []
 
 
+def test_bridge_voices_can_use_piper_provider(capsys, monkeypatch) -> None:
+    class FakePiperProvider:
+        id = "piper"
+
+        def __init__(self, executable: str, voice_dir: str | None = None, model: str | None = None) -> None:
+            self.executable = executable
+            self.voice_dir = voice_dir
+            self.model = model
+
+        def health(self) -> bool:
+            return True
+
+        def list_voices(self):
+            return [TtsVoice(id="voice.onnx", label="Test Piper", locale="de_DE")]
+
+        def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
+            raise AssertionError("not used")
+
+    monkeypatch.setattr("bookcast.bridge.PiperProvider", FakePiperProvider)
+
+    result = main(["bridge", "voices", "--provider", "piper", "--piper-exe", "piper.exe"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert events == [
+        {
+            "event": "voices",
+            "provider": "piper",
+            "voices": [{"id": "voice.onnx", "label": "Test Piper", "locale": "de_DE"}],
+        }
+    ]
+
+
 def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Character Book.txt"

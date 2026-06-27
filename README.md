@@ -12,6 +12,7 @@ Current slice:
 - TXT, MD, EPUB, DOCX, and PDF import.
 - Read-only Calibre library import via `calibredb`.
 - Windows SAPI and configurable `audio.cpp` TTS chunk rendering.
+- Piper local TTS via the existing Trispr-Flow Piper binary/voices when present.
 - ffmpeg assembly to Opus, MP3, WAV, or M4B.
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
 - Interactive podcast sessions with resident Ollama and live follow-ups.
@@ -21,7 +22,7 @@ Current slice:
 
 Planned later:
 
-- Additional TTS providers beyond Windows SAPI.
+- Additional TTS providers beyond Windows SAPI, Piper, and `audio.cpp`.
 - Better UI polish and batch job management.
 - Optional cloud sync / collaboration layer.
 
@@ -73,12 +74,14 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast render <book-id> --library .\library --format m4b
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
 .\.venv\Scripts\bookcast bridge voices
+.\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
 .\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-exe D:\path\to\audiocpp_cli.exe --audio-cpp-model D:\path\to\model
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library
+.\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library --provider piper --voice D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices\de_DE-thorsten-medium.onnx
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>
 .\.venv\Scripts\bookcast bridge calibre-scan "C:\Users\you\Calibre Library"
 .\.venv\Scripts\bookcast bridge calibre-import "C:\Users\you\Calibre Library" --library .\library --id 42

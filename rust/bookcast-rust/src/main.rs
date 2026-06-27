@@ -29,6 +29,8 @@ export component AppWindow inherits Window {
     in-out property <string> audio-cpp-model: "";
     in-out property <string> audio-cpp-backend: "cpu";
     in-out property <string> audio-cpp-family: "";
+    in-out property <string> piper-exe: "";
+    in-out property <string> piper-voice-dir: "";
     in-out property <int> engine-index: 0;
     in-out property <string> status-text: "Ready";
     in-out property <string> diagnostic-text: "Run diagnostics before importing.";
@@ -155,7 +157,7 @@ export component AppWindow inherits Window {
 
                             Text { text: "Engine"; color: rgb(89, 99, 93); }
                             ComboBox {
-                                model: ["Windows SAPI via Python bridge", "audio.cpp external process"];
+                                model: ["Windows SAPI via Python bridge", "Piper local process", "audio.cpp external process"];
                                 current-index <=> root.engine-index;
                             }
                             Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
@@ -180,6 +182,10 @@ export component AppWindow inherits Window {
 
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-exe; }
+                            Text { text: "Piper executable"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.piper-exe; }
+                            Text { text: "Piper voices folder"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.piper-voice-dir; }
                             Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-model; }
                             HorizontalLayout {
@@ -409,6 +415,10 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.voice-name; }
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-exe; }
+                            Text { text: "Piper executable"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.piper-exe; }
+                            Text { text: "Piper voices folder"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.piper-voice-dir; }
                             Text { text: "audio.cpp model"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-model; }
                             Text { text: "audio.cpp backend"; color: rgb(89, 99, 93); }
@@ -449,6 +459,8 @@ export component AppWindow inherits Window {
 
 const AUDIO_CPP_REMOTE: &str = "https://github.com/0xShug0/audio.cpp";
 const AUDIO_CPP_PINNED: &str = include_str!("../audio_cpp.lock");
+const DEFAULT_PIPER_EXE: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe";
+const DEFAULT_PIPER_VOICE_DIR: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices";
 
 #[derive(Clone)]
 struct AppState {
@@ -480,6 +492,8 @@ struct WorkbenchSettings {
     audio_cpp_model: String,
     audio_cpp_backend: String,
     audio_cpp_family: String,
+    piper_exe: String,
+    piper_voice_dir: String,
     ollama_url: String,
     ollama_model: String,
     speaker_voice_map: String,
@@ -497,6 +511,12 @@ fn main() -> Result<(), slint::PlatformError> {
     };
 
     app.set_library_path("library".into());
+    if Path::new(DEFAULT_PIPER_EXE).exists() {
+        app.set_piper_exe(DEFAULT_PIPER_EXE.into());
+    }
+    if Path::new(DEFAULT_PIPER_VOICE_DIR).exists() {
+        app.set_piper_voice_dir(DEFAULT_PIPER_VOICE_DIR.into());
+    }
     app.set_guide_text("Run Diagnose. If ffmpeg and TTS are ready, import a file or scan Calibre. Render jobs go through the queue and can be cancelled.".into());
     load_settings(&app, &state.repo_root);
 
@@ -1037,6 +1057,12 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_audio_cpp_backend(settings.audio_cpp_backend.into());
     }
     app.set_audio_cpp_family(settings.audio_cpp_family.into());
+    if !settings.piper_exe.is_empty() {
+        app.set_piper_exe(settings.piper_exe.into());
+    }
+    if !settings.piper_voice_dir.is_empty() {
+        app.set_piper_voice_dir(settings.piper_voice_dir.into());
+    }
     if !settings.ollama_url.is_empty() {
         app.set_ollama_url(settings.ollama_url.into());
     }
@@ -1047,7 +1073,15 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_speaker_voice_map(settings.speaker_voice_map.into());
     }
     app.set_podcast_mode_index(settings.podcast_mode_index);
-    app.set_engine_index(settings.engine_index);
+    let engine_index = if settings.engine_index == 1
+        && (!app.get_audio_cpp_exe().to_string().is_empty()
+            || !app.get_audio_cpp_model().to_string().is_empty())
+    {
+        2
+    } else {
+        settings.engine_index
+    };
+    app.set_engine_index(engine_index);
     app.set_current_view(settings.current_view);
     app.set_status_text(format!("Settings loaded: {}", path.display()).into());
 }
@@ -1067,6 +1101,8 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         audio_cpp_model: app.get_audio_cpp_model().to_string(),
         audio_cpp_backend: app.get_audio_cpp_backend().to_string(),
         audio_cpp_family: app.get_audio_cpp_family().to_string(),
+        piper_exe: app.get_piper_exe().to_string(),
+        piper_voice_dir: app.get_piper_voice_dir().to_string(),
         ollama_url: app.get_ollama_url().to_string(),
         ollama_model: app.get_ollama_model().to_string(),
         speaker_voice_map: app.get_speaker_voice_map().to_string(),
@@ -1139,6 +1175,8 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
         args.extend(["--voice".into(), voice]);
     }
     if app.get_engine_index() == 1 {
+        args.extend(piper_args(app));
+    } else if app.get_engine_index() == 2 {
         args.extend(["--provider".into(), "audio_cpp".into()]);
         args.extend([
             "--audio-cpp-exe".into(),
@@ -1160,6 +1198,23 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     args
 }
 
+fn piper_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec!["--provider".into(), "piper".into()];
+    let exe = app.get_piper_exe().to_string();
+    if !exe.trim().is_empty() {
+        args.extend(["--piper-exe".into(), exe]);
+    }
+    let voice_dir = app.get_piper_voice_dir().to_string();
+    if !voice_dir.trim().is_empty() {
+        args.extend(["--piper-voice-dir".into(), voice_dir]);
+    }
+    let voice = app.get_voice_name().to_string();
+    if !voice.trim().is_empty() {
+        args.extend(["--piper-model".into(), voice]);
+    }
+    args
+}
+
 fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
     let mut args = vec![
         "bridge".into(),
@@ -1177,6 +1232,8 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
         args.extend(["--voice".into(), entry]);
     }
     if app.get_engine_index() == 1 {
+        args.extend(piper_args(app));
+    } else if app.get_engine_index() == 2 {
         args.extend(["--provider".into(), "audio_cpp".into()]);
         args.extend([
             "--audio-cpp-exe".into(),
@@ -1201,6 +1258,8 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
 fn voice_args(app: &AppWindow) -> Vec<String> {
     let mut args = vec!["bridge".into(), "voices".into()];
     if app.get_engine_index() == 1 {
+        args.extend(piper_args(app));
+    } else if app.get_engine_index() == 2 {
         args.extend(["--provider".into(), "audio_cpp".into()]);
         args.extend([
             "--audio-cpp-exe".into(),
@@ -1506,13 +1565,23 @@ fn handle_bridge_events(
                     .get("windows_sapi")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                let piper = value
+                    .get("piper")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let piper_exe = value
+                    .get("piper_executable")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing");
                 set_diagnostics(
                     weak.clone(),
-                    &format!("ffmpeg: {ffmpeg}\nffprobe: {ffprobe}\ncalibredb: {calibredb}\nWindows SAPI: {sapi}"),
+                    &format!("ffmpeg: {ffmpeg}\nffprobe: {ffprobe}\ncalibredb: {calibredb}\nWindows SAPI: {sapi}\nPiper: {piper}\nPiper exe: {piper_exe}"),
                 );
                 set_guide(
                     weak.clone(),
-                    if sapi {
+                    if piper {
+                        "Diagnostics found Piper. Choose Piper local process, discover voices, then render a sample."
+                    } else if sapi {
                         "Diagnostics OK enough for Windows SAPI render. Import a source or scan Calibre."
                     } else {
                         "Windows SAPI unavailable. Configure audio.cpp before rendering."
