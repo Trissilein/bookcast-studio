@@ -69,6 +69,8 @@ The Import Wizard uses the selected cleanup profile for both local and Calibre
 imports, so chunking can be chosen before text enters the library.
 Book previews now show chapter summaries plus the first chunk hashes, lengths,
 statuses, and text excerpts, which makes cleanup/chunking verifiable before TTS.
+Full renders can be limited to the first N chunks from TTS Studio for controlled
+batch testing; sample render still renders exactly one chunk.
 
 Python fallback UI:
 

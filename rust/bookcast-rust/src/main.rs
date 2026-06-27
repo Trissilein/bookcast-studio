@@ -24,6 +24,7 @@ export component AppWindow inherits Window {
     in-out property <string> voice-name: "";
     in-out property <string> voice-list-text: "Discover voices before choosing one.";
     in-out property <string> output-format: "opus";
+    in-out property <string> render-limit: "";
     in-out property <string> last-output-path: "";
     in-out property <string> output-list-text: "No outputs loaded.";
     in-out property <string> audio-cpp-exe: "";
@@ -211,6 +212,10 @@ export component AppWindow inherits Window {
                                 VerticalLayout {
                                     Text { text: "Voice"; color: rgb(89, 99, 93); }
                                     LineEdit { text <=> root.voice-name; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Full render chunk limit"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.render-limit; }
                                 }
                             }
                             Text {
@@ -546,6 +551,8 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Default output format"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.output-format; }
+                            Text { text: "Full render chunk limit (empty = all)"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.render-limit; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.voice-name; }
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
@@ -634,6 +641,7 @@ struct JobState {
 }
 
 #[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
 struct WorkbenchSettings {
     library_path: String,
     source_path: String,
@@ -642,6 +650,7 @@ struct WorkbenchSettings {
     book_id: String,
     voice_name: String,
     output_format: String,
+    render_limit: String,
     last_output_path: String,
     audio_cpp_exe: String,
     audio_cpp_model: String,
@@ -1068,6 +1077,12 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_render_plan_text(render_plan_text(&app).into());
             return;
         }
+        if let Some(problem) = render_limit_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            app.set_render_plan_text(render_plan_text(&app).into());
+            return;
+        }
         app.set_render_plan_text(render_plan_text(&app).into());
         let args = render_args(&app, "render", book_id);
         run_bridge(app.as_weak(), render_state.clone(), "render", args);
@@ -1445,6 +1460,7 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
     if !settings.output_format.is_empty() {
         app.set_output_format(settings.output_format.into());
     }
+    app.set_render_limit(settings.render_limit.into());
     app.set_last_output_path(settings.last_output_path.into());
     if !settings.audio_cpp_exe.is_empty() {
         app.set_audio_cpp_exe(settings.audio_cpp_exe.into());
@@ -1493,6 +1509,7 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         book_id: app.get_book_id().to_string(),
         voice_name: app.get_voice_name().to_string(),
         output_format: app.get_output_format().to_string(),
+        render_limit: app.get_render_limit().to_string(),
         last_output_path: app.get_last_output_path().to_string(),
         audio_cpp_exe: app.get_audio_cpp_exe().to_string(),
         audio_cpp_model: app.get_audio_cpp_model().to_string(),
@@ -1568,6 +1585,22 @@ fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
     )
 }
 
+fn render_limit_problem(app: &AppWindow) -> Option<String> {
+    let limit = app.get_render_limit().to_string();
+    render_limit_problem_from(&limit)
+}
+
+fn render_limit_problem_from(limit: &str) -> Option<String> {
+    let trimmed = limit.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    match trimmed.parse::<u32>() {
+        Ok(value) if value > 0 => None,
+        _ => Some("Render chunk limit must be empty or a positive whole number.".to_string()),
+    }
+}
+
 fn render_preflight_problem_from(
     book_id: &str,
     output_format: &str,
@@ -1610,6 +1643,12 @@ fn render_plan_text(app: &AppWindow) -> String {
     };
     let book = app.get_book_id().to_string();
     let output = app.get_output_format().to_string();
+    let limit = app.get_render_limit().to_string();
+    let limit = if limit.trim().is_empty() {
+        "all chunks".to_string()
+    } else {
+        format!("first {} chunks", limit.trim())
+    };
     let voice = app.get_voice_name().to_string();
     let voice = if voice.trim().is_empty() {
         "default voice".to_string()
@@ -1617,7 +1656,7 @@ fn render_plan_text(app: &AppWindow) -> String {
         voice
     };
     format!(
-        "Render plan: book {}, engine {engine}, voice {voice}, output {}. Run sample first; full render uses same settings.",
+        "Render plan: book {}, engine {engine}, voice {voice}, output {}, full render {limit}. Run sample first; full render uses same settings.",
         if book.trim().is_empty() { "(none)" } else { book.trim() },
         if output.trim().is_empty() { "opus" } else { output.trim() }
     )
@@ -1636,6 +1675,10 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     let voice = app.get_voice_name().to_string();
     if !voice.trim().is_empty() {
         args.extend(["--voice".into(), voice]);
+    }
+    let limit = app.get_render_limit().to_string();
+    if command == "render" && !limit.trim().is_empty() {
+        args.extend(["--limit".into(), limit.trim().to_string()]);
     }
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
@@ -2738,6 +2781,7 @@ mod tests {
     use serde_json::json;
 
     use super::job_progress_detail;
+    use super::render_limit_problem_from;
     use super::render_preflight_problem_from;
 
     #[test]
@@ -2762,6 +2806,20 @@ mod tests {
             render_preflight_problem_from("book-1", "opus", 2, "", "audiocpp_cli.exe", "")
                 .as_deref(),
             Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
+        );
+    }
+
+    #[test]
+    fn render_limit_accepts_empty_or_positive_integer() {
+        assert_eq!(render_limit_problem_from(""), None);
+        assert_eq!(render_limit_problem_from("3"), None);
+        assert_eq!(
+            render_limit_problem_from("0").as_deref(),
+            Some("Render chunk limit must be empty or a positive whole number.")
+        );
+        assert_eq!(
+            render_limit_problem_from("abc").as_deref(),
+            Some("Render chunk limit must be empty or a positive whole number.")
         );
     }
 
