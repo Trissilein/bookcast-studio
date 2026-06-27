@@ -81,6 +81,7 @@ export component AppWindow inherits Window {
     callback discover-voices();
     callback load-outputs();
     callback open-output();
+    callback open-output-folder();
     callback refresh-audio-cpp();
     callback cancel-job();
 
@@ -278,7 +279,11 @@ export component AppWindow inherits Window {
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
                             Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
-                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Open File"; clicked => { root.open-output(); } }
+                                Button { text: "Open Folder"; clicked => { root.open-output-folder(); } }
+                            }
                             Text {
                                 text: root.output-list-text;
                                 color: rgb(70, 80, 74);
@@ -428,7 +433,11 @@ export component AppWindow inherits Window {
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
                             Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
-                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Open File"; clicked => { root.open-output(); } }
+                                Button { text: "Open Folder"; clicked => { root.open-output-folder(); } }
+                            }
                             Text {
                                 text: root.output-list-text;
                                 color: rgb(70, 80, 74);
@@ -521,7 +530,11 @@ export component AppWindow inherits Window {
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
                             Button { text: "Refresh Outputs"; clicked => { root.load-outputs(); } }
-                            Button { text: "Open Output"; clicked => { root.open-output(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Open File"; clicked => { root.open-output(); } }
+                                Button { text: "Open Folder"; clicked => { root.open-output-folder(); } }
+                            }
                             Text {
                                 text: root.output-list-text;
                                 color: rgb(70, 80, 74);
@@ -990,7 +1003,18 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text("No output path to open.".into());
             return;
         }
-        open_output(app.as_weak(), output);
+        open_output(app.as_weak(), output, false);
+    });
+
+    let weak = app.as_weak();
+    app.on_open_output_folder(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let output = app.get_last_output_path().to_string();
+        if output.trim().is_empty() {
+            app.set_status_text("No output path to open.".into());
+            return;
+        }
+        open_output(app.as_weak(), output, true);
     });
 
     let weak = app.as_weak();
@@ -1378,26 +1402,43 @@ fn cancel_active_job(weak: slint::Weak<AppWindow>, active_pid: Arc<Mutex<Option<
     }
 }
 
-fn open_output(weak: slint::Weak<AppWindow>, output: String) {
-    let path = PathBuf::from(output.trim());
-    let target = if path.is_dir() {
-        path
-    } else {
-        path.parent().map(Path::to_path_buf).unwrap_or(path)
-    };
+fn open_output(weak: slint::Weak<AppWindow>, output: String, folder: bool) {
+    let target = output_open_target(&output, folder);
     #[cfg(windows)]
-    let result = Command::new("explorer").arg(target).output();
+    let result = if folder {
+        Command::new("explorer").arg(&target).output()
+    } else {
+        Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(&target)
+            .output()
+    };
     #[cfg(not(windows))]
-    let result = Command::new("xdg-open").arg(target).output();
+    let result = Command::new("xdg-open").arg(&target).output();
 
     match result {
-        Ok(output) if output.status.success() => set_status(weak, "Output opened."),
+        Ok(output) if output.status.success() => set_status(
+            weak,
+            if folder {
+                "Output folder opened."
+            } else {
+                "Output file opened."
+            },
+        ),
         Ok(output) => {
             let detail = String::from_utf8_lossy(&output.stderr);
             set_status(weak, &format!("Open output failed: {}", detail.trim()));
         }
         Err(error) => set_status(weak, &format!("Open output failed: {error}")),
     }
+}
+
+fn output_open_target(output: &str, folder: bool) -> PathBuf {
+    let path = PathBuf::from(output.trim());
+    if folder && !path.is_dir() {
+        return path.parent().map(Path::to_path_buf).unwrap_or(path);
+    }
+    path
 }
 
 fn python_invocation(repo_root: &Path) -> (String, Vec<String>) {
@@ -2058,7 +2099,10 @@ fn handle_bridge_events(
                 }
                 if let Some(output) = value.get("output").and_then(Value::as_str) {
                     set_last_output(weak.clone(), output);
-                    set_guide(weak.clone(), &format!("Render finished: {output}"));
+                    set_guide(
+                        weak.clone(),
+                        &format!("Render finished: {output}. Use Open File to play, Open Folder to inspect."),
+                    );
                 }
             }
             Some("voices") => {
@@ -2255,7 +2299,7 @@ fn handle_bridge_events(
                     set_last_output(weak.clone(), path);
                     set_guide(
                         weak.clone(),
-                        "Outputs loaded. Open Output will open the newest output folder.",
+                        "Outputs loaded. Open File plays newest output; Open Folder opens its folder.",
                     );
                 }
             }
@@ -2556,7 +2600,10 @@ fn handle_bridge_events(
                     set_guide(weak.clone(), &format!("Podcast script saved: {path}"));
                 } else if let Some(output) = value.get("output").and_then(Value::as_str) {
                     set_last_output(weak.clone(), output);
-                    set_guide(weak.clone(), &format!("Podcast rendered: {output}"));
+                    set_guide(
+                        weak.clone(),
+                        &format!("Podcast rendered: {output}. Use Open File to play, Open Folder to inspect."),
+                    );
                 }
             }
             Some("error") => {
@@ -2778,9 +2825,12 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use serde_json::json;
 
     use super::job_progress_detail;
+    use super::output_open_target;
     use super::render_limit_problem_from;
     use super::render_preflight_problem_from;
 
@@ -2821,6 +2871,13 @@ mod tests {
             render_limit_problem_from("abc").as_deref(),
             Some("Render chunk limit must be empty or a positive whole number.")
         );
+    }
+
+    #[test]
+    fn output_open_target_can_open_file_or_parent_folder() {
+        let path = r"C:\tmp\book.opus";
+        assert_eq!(output_open_target(path, false), PathBuf::from(path));
+        assert_eq!(output_open_target(path, true), PathBuf::from(r"C:\tmp"));
     }
 
     #[test]
