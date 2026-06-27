@@ -92,6 +92,52 @@ class CalibreClient:
         return proc.stdout
 
 
+def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -> dict[str, object]:
+    path = Path(library_path)
+    executable = calibredb or find_calibredb()
+    issues: list[str] = []
+    hints: list[str] = []
+    metadata_db = path / "metadata.db"
+    readable = False
+    sample_count: int | None = None
+
+    if not path.exists():
+        issues.append(f"Calibre library path does not exist: {path}")
+        hints.append("Choose the Calibre library root folder, not an individual EPUB file.")
+    elif not path.is_dir():
+        issues.append(f"Calibre library path is not a folder: {path}")
+        hints.append("Choose the folder that contains metadata.db.")
+    elif not metadata_db.exists():
+        issues.append(f"metadata.db not found in: {path}")
+        hints.append("Choose the Calibre library root folder, not an author/book subfolder.")
+
+    if not executable:
+        issues.append("calibredb not found")
+        hints.append("Install Calibre or pass --calibredb with the full path to calibredb.exe.")
+
+    if not issues and executable:
+        try:
+            sample_count = len(CalibreClient(path, calibredb=executable).scan(limit=1))
+            readable = True
+        except RuntimeError as exc:
+            issues.append(str(exc))
+            hints.append("Close Calibre if it is locking the library, then retry.")
+
+    return {
+        "healthy": not issues,
+        "calibre_library": str(path),
+        "library_exists": path.exists(),
+        "is_dir": path.is_dir(),
+        "metadata_db": str(metadata_db),
+        "metadata_db_exists": metadata_db.exists(),
+        "calibredb": executable or "",
+        "readable": readable,
+        "sample_count": sample_count,
+        "issues": issues,
+        "hints": hints,
+    }
+
+
 def find_calibredb() -> str | None:
     found = shutil.which("calibredb")
     if found:

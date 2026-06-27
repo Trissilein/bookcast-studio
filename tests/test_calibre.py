@@ -4,7 +4,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from bookcast.calibre import CalibreBook, parse_calibre_list
+from bookcast.calibre import CalibreBook, diagnose_calibre_library, parse_calibre_list
 from bookcast.library import BookLibrary
 
 
@@ -62,6 +62,19 @@ def test_calibre_import_uses_external_id_for_dedupe(tmp_path: Path) -> None:
     assert books[0]["author"] == "Metadata Author"
 
 
+def test_calibre_diagnose_explains_wrong_folder(tmp_path: Path, monkeypatch) -> None:
+    wrong_folder = tmp_path / "Author Name"
+    wrong_folder.mkdir()
+    monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
+
+    diagnostic = diagnose_calibre_library(wrong_folder)
+
+    assert diagnostic["healthy"] is False
+    assert diagnostic["metadata_db_exists"] is False
+    assert diagnostic["issues"] == [f"metadata.db not found in: {wrong_folder}"]
+    assert diagnostic["hints"] == ["Choose the Calibre library root folder, not an author/book subfolder."]
+
+
 class _FakeCalibreClient:
     def __init__(self, library_path: Path, exported: Path) -> None:
         self.library_path = library_path
@@ -105,4 +118,3 @@ def _write_epub(path: Path) -> None:
             """,
         )
         zf.writestr("OEBPS/chapter.xhtml", "<html><body><h1>Start</h1><p>Text.</p></body></html>")
-

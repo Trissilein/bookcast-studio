@@ -83,6 +83,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library --provider piper --voice D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices\de_DE-thorsten-medium.onnx
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>
+.\.venv\Scripts\bookcast bridge calibre-diagnose "C:\Users\you\Calibre Library"
 .\.venv\Scripts\bookcast bridge calibre-scan "C:\Users\you\Calibre Library"
 .\.venv\Scripts\bookcast bridge calibre-import "C:\Users\you\Calibre Library" --library .\library --id 42
 .\.venv\Scripts\bookcast bridge render <book-id> --library .\library --provider audio_cpp --audio-cpp-model D:\path\to\model --audio-cpp-family <family>
@@ -108,6 +109,8 @@ both the upstream pin and the local executable/model configuration.
 
 BookCast reads Calibre through the official `calibredb` CLI and copies exported
 files into its own library. It does not write back to Calibre.
+The Rust Import Wizard diagnoses wrong folders, missing `metadata.db`, missing
+`calibredb`, and locked/unreadable libraries before scanning.
 
 ```powershell
 .\.venv\Scripts\bookcast calibre scan "C:\Users\you\Calibre Library"

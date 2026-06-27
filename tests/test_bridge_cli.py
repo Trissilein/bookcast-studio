@@ -60,6 +60,22 @@ def test_bridge_calibre_import_emits_progress(tmp_path: Path, capsys, monkeypatc
             return exported
 
     monkeypatch.setattr("bookcast.bridge.CalibreClient", FakeCalibreClient)
+    monkeypatch.setattr(
+        "bookcast.bridge.diagnose_calibre_library",
+        lambda path, calibredb=None: {
+            "healthy": True,
+            "calibre_library": str(path),
+            "library_exists": True,
+            "is_dir": True,
+            "metadata_db": str(Path(path) / "metadata.db"),
+            "metadata_db_exists": True,
+            "calibredb": "calibredb",
+            "readable": True,
+            "sample_count": 1,
+            "issues": [],
+            "hints": [],
+        },
+    )
     result = main(
         [
             "bridge",
@@ -75,12 +91,28 @@ def test_bridge_calibre_import_emits_progress(tmp_path: Path, capsys, monkeypatc
 
     assert result == 0
     assert [event["event"] for event in events] == [
+        "calibre_diagnostic",
         "job_started",
         "calibre_imported",
         "job_progress",
         "job_done",
     ]
     assert events[-1]["imported"][0]["calibre_id"] == "7"
+
+
+def test_bridge_calibre_scan_explains_bad_library_path(tmp_path: Path, capsys, monkeypatch) -> None:
+    wrong_folder = tmp_path / "Author Folder"
+    wrong_folder.mkdir()
+    monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
+
+    result = main(["bridge", "calibre-scan", str(wrong_folder)])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert events[0]["event"] == "calibre_diagnostic"
+    assert events[0]["healthy"] is False
+    assert events[0]["issues"] == [f"metadata.db not found in: {wrong_folder}"]
+    assert "Calibre library root" in events[0]["hints"][0]
 
 
 def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypatch) -> None:

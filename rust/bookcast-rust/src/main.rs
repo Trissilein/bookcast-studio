@@ -461,7 +461,8 @@ const AUDIO_CPP_REMOTE: &str = "https://github.com/0xShug0/audio.cpp";
 const AUDIO_CPP_PINNED: &str = include_str!("../audio_cpp.lock");
 const DEFAULT_PIPER_EXE: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe";
 const DEFAULT_PIPER_VOICE_DIR: &str = r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices";
-const DEFAULT_AUDIO_CPP_EXE: &str = r"D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe";
+const DEFAULT_AUDIO_CPP_EXE: &str =
+    r"D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe";
 
 #[derive(Clone)]
 struct AppState {
@@ -762,7 +763,12 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             return;
         }
         let args = podcast_render_args(&app, book_id);
-        run_bridge(app.as_weak(), podcast_render_state.clone(), "podcast render", args);
+        run_bridge(
+            app.as_weak(),
+            podcast_render_state.clone(),
+            "podcast render",
+            args,
+        );
     });
 
     let weak = app.as_weak();
@@ -1399,11 +1405,42 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
 }
 
 fn summarize_output(text: &str) -> String {
+    if let Some(value) = text
+        .lines()
+        .rev()
+        .find_map(|line| serde_json::from_str::<Value>(line).ok())
+    {
+        if let Some(message) = value.get("message").and_then(Value::as_str) {
+            return message.chars().take(180).collect();
+        }
+        if let Some(issue) = value
+            .get("issues")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(Value::as_str)
+        {
+            return issue.chars().take(180).collect();
+        }
+    }
     text.lines()
         .rev()
         .find(|line| !line.trim().is_empty())
         .map(|line| line.trim().chars().take(180).collect())
         .unwrap_or_else(|| "No output".to_string())
+}
+
+fn json_string_list(value: &Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
 }
 
 fn handle_bridge_events(
@@ -1507,7 +1544,10 @@ fn handle_bridge_events(
                 );
             }
             Some("audio_cpp_health") => {
-                let healthy = value.get("healthy").and_then(Value::as_bool).unwrap_or(false);
+                let healthy = value
+                    .get("healthy")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 let executable = value
                     .get("executable")
                     .and_then(Value::as_str)
@@ -1528,7 +1568,10 @@ fn handle_bridge_events(
                         weak.clone(),
                         &format!("audio.cpp: local config OK ({executable})"),
                     );
-                    set_guide(weak.clone(), "audio.cpp local health OK. Render sample next.");
+                    set_guide(
+                        weak.clone(),
+                        "audio.cpp local health OK. Render sample next.",
+                    );
                 } else {
                     let detail = if issues.is_empty() {
                         "audio.cpp local config failed".to_string()
@@ -1537,6 +1580,50 @@ fn handle_bridge_events(
                     };
                     set_audio_status(weak.clone(), &format!("audio.cpp: {detail}"));
                     set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
+                }
+            }
+            Some("calibre_diagnostic") => {
+                let healthy = value
+                    .get("healthy")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let library = value
+                    .get("calibre_library")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let calibredb = value
+                    .get("calibredb")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing");
+                let metadata = value
+                    .get("metadata_db_exists")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let issues = json_string_list(&value, "issues");
+                let hints = json_string_list(&value, "hints");
+                let detail = if healthy {
+                    format!(
+                        "Calibre OK\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}"
+                    )
+                } else {
+                    format!(
+                        "Calibre problem\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}\n\nIssues:\n{issues}\n\nHints:\n{hints}"
+                    )
+                };
+                set_calibre_preview(weak.clone(), &detail);
+                if healthy {
+                    set_guide(
+                        weak.clone(),
+                        "Calibre path looks valid. Scan/import can continue.",
+                    );
+                } else {
+                    set_guide(
+                        weak.clone(),
+                        &format!(
+                            "Fix Calibre setup: {}",
+                            issues.lines().next().unwrap_or("unknown issue")
+                        ),
+                    );
                 }
             }
             Some("outputs") => {
@@ -1571,10 +1658,7 @@ fn handle_bridge_events(
                     .get("windows_sapi")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                let piper = value
-                    .get("piper")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false);
+                let piper = value.get("piper").and_then(Value::as_bool).unwrap_or(false);
                 let piper_exe = value
                     .get("piper_executable")
                     .and_then(Value::as_str)
@@ -1734,10 +1818,8 @@ fn handle_bridge_events(
                             .map(|item| {
                                 let name = item.get("name").and_then(Value::as_str).unwrap_or("");
                                 let role = item.get("role").and_then(Value::as_str).unwrap_or("");
-                                let evidence = item
-                                    .get("evidence")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("");
+                                let evidence =
+                                    item.get("evidence").and_then(Value::as_str).unwrap_or("");
                                 format!("{name} | {role} | {evidence}")
                             })
                             .collect::<Vec<_>>()
@@ -1753,7 +1835,10 @@ fn handle_bridge_events(
             }
             Some("podcast_script") => {
                 let script = value.get("script").unwrap_or(&Value::Null);
-                let title = script.get("title").and_then(Value::as_str).unwrap_or("Untitled");
+                let title = script
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Untitled");
                 let summary = script.get("summary").and_then(Value::as_str).unwrap_or("");
                 let speakers = script
                     .get("speakers")
@@ -1774,8 +1859,10 @@ fn handle_bridge_events(
                             .iter()
                             .take(12)
                             .map(|turn| {
-                                let speaker =
-                                    turn.get("speaker").and_then(Value::as_str).unwrap_or("host");
+                                let speaker = turn
+                                    .get("speaker")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("host");
                                 let text = turn.get("text").and_then(Value::as_str).unwrap_or("");
                                 format!("{speaker}: {text}")
                             })

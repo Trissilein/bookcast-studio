@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .calibre import CalibreClient, find_calibredb
+from .calibre import CalibreClient, diagnose_calibre_library, find_calibredb
 from .characters import suggest_characters as generate_character_suggestions
 from .library import BookLibrary
 from .llm import OllamaProvider
@@ -271,7 +271,11 @@ def import_file(library_root: Path, source: Path, cleanup_profile: str = "standa
 
 
 def calibre_scan(calibre_library: Path, calibredb: str | None = None, limit: int | None = None) -> int:
-    executable = calibredb or find_calibredb() or "calibredb"
+    diagnostic = diagnose_calibre_library(calibre_library, calibredb=calibredb)
+    emit("calibre_diagnostic", **diagnostic)
+    if diagnostic["issues"]:
+        return 1
+    executable = str(diagnostic["calibredb"])
     emit("job_started", job="calibre_scan", calibre_library=str(calibre_library), calibredb=executable)
     client = CalibreClient(calibre_library, calibredb=executable)
     books = client.scan(limit=limit)
@@ -285,6 +289,12 @@ def calibre_scan(calibre_library: Path, calibredb: str | None = None, limit: int
     return 0
 
 
+def calibre_diagnose(calibre_library: Path, calibredb: str | None = None) -> int:
+    diagnostic = diagnose_calibre_library(calibre_library, calibredb=calibredb)
+    emit("calibre_diagnostic", **diagnostic)
+    return 0 if diagnostic["healthy"] else 1
+
+
 def calibre_import(
     library_root: Path,
     calibre_library: Path,
@@ -293,7 +303,11 @@ def calibre_import(
     limit: int | None = None,
     cleanup_profile: str = "standard",
 ) -> int:
-    executable = calibredb or find_calibredb() or "calibredb"
+    diagnostic = diagnose_calibre_library(calibre_library, calibredb=calibredb)
+    emit("calibre_diagnostic", **diagnostic)
+    if diagnostic["issues"]:
+        return 1
+    executable = str(diagnostic["calibredb"])
     emit("job_started", job="calibre_import", calibre_library=str(calibre_library), calibredb=executable)
     client = CalibreClient(calibre_library, calibredb=executable)
     books = [book for book in client.scan(limit=limit) if book.preferred_format()]

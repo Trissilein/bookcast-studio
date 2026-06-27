@@ -179,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     bridge_calibre.add_argument("--calibredb", default=None)
     bridge_calibre.add_argument("--limit", type=int, default=None)
 
+    bridge_calibre_diagnose = bridge_sub.add_parser("calibre-diagnose", help="Diagnose a Calibre library path")
+    bridge_calibre_diagnose.add_argument("calibre_library", type=Path)
+    bridge_calibre_diagnose.add_argument("--calibredb", default=None)
+
     bridge_calibre_import = bridge_sub.add_parser("calibre-import", help="Import Calibre books and emit JSONL results")
     bridge_calibre_import.add_argument("calibre_library", type=Path)
     bridge_calibre_import.add_argument("--library", type=Path, required=True)
@@ -286,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:
             return bridge.run_safely(bridge.import_file, args.library, args.file, args.cleanup_profile)
         if args.bridge_command == "calibre-scan":
             return bridge.run_safely(bridge.calibre_scan, args.calibre_library, args.calibredb, args.limit)
+        if args.bridge_command == "calibre-diagnose":
+            return bridge.run_safely(bridge.calibre_diagnose, args.calibre_library, args.calibredb)
         if args.bridge_command == "calibre-import":
             return bridge.run_safely(
                 bridge.calibre_import,
