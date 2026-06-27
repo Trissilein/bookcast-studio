@@ -19,6 +19,7 @@ export component AppWindow inherits Window {
     in-out property <string> source-path: "";
     in-out property <string> calibre-path: "";
     in-out property <string> calibre-ids: "";
+    in-out property <string> calibre-limit: "50";
     in-out property <string> calibre-preview-text: "No Calibre scan yet.";
     in-out property <string> book-id: "";
     in-out property <string> voice-name: "";
@@ -342,6 +343,8 @@ export component AppWindow inherits Window {
                             Button { text: "Scan Calibre"; clicked => { root.scan-calibre(); } }
                             Text { text: "Calibre IDs"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.calibre-ids; }
+                            Text { text: "Calibre scan/import limit"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.calibre-limit; }
                             Button { text: "Import Calibre IDs"; clicked => { root.import-calibre(); } }
                             Text {
                                 text: root.calibre-preview-text;
@@ -660,6 +663,7 @@ struct WorkbenchSettings {
     source_path: String,
     calibre_path: String,
     calibre_ids: String,
+    calibre_limit: String,
     book_id: String,
     voice_name: String,
     output_format: String,
@@ -885,12 +889,15 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text("Calibre scan needs a library path.".into());
             return;
         }
-        run_bridge(
-            app.as_weak(),
-            calibre_state.clone(),
-            "calibre scan",
-            vec!["bridge".into(), "calibre-scan".into(), calibre],
-        );
+        if let Some(problem) =
+            optional_positive_limit_problem(&app.get_calibre_limit().to_string(), "Calibre limit")
+        {
+            app.set_status_text(problem.into());
+            return;
+        }
+        let mut args = vec!["bridge".into(), "calibre-scan".into(), calibre];
+        append_calibre_limit_args(&mut args, &app);
+        run_bridge(app.as_weak(), calibre_state.clone(), "calibre scan", args);
     });
 
     let weak = app.as_weak();
@@ -900,6 +907,12 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let calibre = app.get_calibre_path().to_string();
         if calibre.trim().is_empty() {
             app.set_status_text("Calibre import needs a library path.".into());
+            return;
+        }
+        if let Some(problem) =
+            optional_positive_limit_problem(&app.get_calibre_limit().to_string(), "Calibre limit")
+        {
+            app.set_status_text(problem.into());
             return;
         }
         let mut args = vec![
@@ -916,6 +929,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if !profile.trim().is_empty() {
             args.extend(["--cleanup-profile".into(), profile]);
         }
+        append_calibre_limit_args(&mut args, &app);
         run_bridge(
             app.as_weak(),
             calibre_import_state.clone(),
@@ -1496,6 +1510,9 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
     app.set_source_path(settings.source_path.into());
     app.set_calibre_path(settings.calibre_path.into());
     app.set_calibre_ids(settings.calibre_ids.into());
+    if !settings.calibre_limit.is_empty() {
+        app.set_calibre_limit(settings.calibre_limit.into());
+    }
     app.set_book_id(settings.book_id.into());
     app.set_voice_name(settings.voice_name.into());
     if !settings.output_format.is_empty() {
@@ -1547,6 +1564,7 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         source_path: app.get_source_path().to_string(),
         calibre_path: app.get_calibre_path().to_string(),
         calibre_ids: app.get_calibre_ids().to_string(),
+        calibre_limit: app.get_calibre_limit().to_string(),
         book_id: app.get_book_id().to_string(),
         voice_name: app.get_voice_name().to_string(),
         output_format: app.get_output_format().to_string(),
@@ -1628,17 +1646,17 @@ fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
 
 fn render_limit_problem(app: &AppWindow) -> Option<String> {
     let limit = app.get_render_limit().to_string();
-    render_limit_problem_from(&limit)
+    optional_positive_limit_problem(&limit, "Render chunk limit")
 }
 
-fn render_limit_problem_from(limit: &str) -> Option<String> {
+fn optional_positive_limit_problem(limit: &str, label: &str) -> Option<String> {
     let trimmed = limit.trim();
     if trimmed.is_empty() {
         return None;
     }
     match trimmed.parse::<u32>() {
         Ok(value) if value > 0 => None,
-        _ => Some("Render chunk limit must be empty or a positive whole number.".to_string()),
+        _ => Some(format!("{label} must be empty or a positive whole number.")),
     }
 }
 
@@ -1840,6 +1858,13 @@ fn outputs_args(app: &AppWindow) -> Vec<String> {
         args.extend(["--book-id".into(), book_id]);
     }
     args
+}
+
+fn append_calibre_limit_args(args: &mut Vec<String>, app: &AppWindow) {
+    let limit = app.get_calibre_limit().to_string();
+    if !limit.trim().is_empty() {
+        args.extend(["--limit".into(), limit.trim().to_string()]);
+    }
 }
 
 fn preview_args(app: &AppWindow, book_id: String) -> Vec<String> {
@@ -2847,8 +2872,8 @@ mod tests {
     use serde_json::json;
 
     use super::job_progress_detail;
+    use super::optional_positive_limit_problem;
     use super::output_open_target;
-    use super::render_limit_problem_from;
     use super::render_preflight_problem_from;
 
     #[test]
@@ -2878,15 +2903,25 @@ mod tests {
 
     #[test]
     fn render_limit_accepts_empty_or_positive_integer() {
-        assert_eq!(render_limit_problem_from(""), None);
-        assert_eq!(render_limit_problem_from("3"), None);
         assert_eq!(
-            render_limit_problem_from("0").as_deref(),
+            optional_positive_limit_problem("", "Render chunk limit"),
+            None
+        );
+        assert_eq!(
+            optional_positive_limit_problem("3", "Render chunk limit"),
+            None
+        );
+        assert_eq!(
+            optional_positive_limit_problem("0", "Render chunk limit").as_deref(),
             Some("Render chunk limit must be empty or a positive whole number.")
         );
         assert_eq!(
-            render_limit_problem_from("abc").as_deref(),
+            optional_positive_limit_problem("abc", "Render chunk limit").as_deref(),
             Some("Render chunk limit must be empty or a positive whole number.")
+        );
+        assert_eq!(
+            optional_positive_limit_problem("-1", "Calibre limit").as_deref(),
+            Some("Calibre limit must be empty or a positive whole number.")
         );
     }
 
