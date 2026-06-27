@@ -45,6 +45,9 @@ cargo run -p bookcast-rust
 The Rust workbench has separate views for TTS Studio, Import, Library, and
 Settings. `Save Settings` writes `.bookcast-workbench.json` in the repo root;
 the file is ignored by Git.
+TTS Studio shows a render plan and blocks obvious bad jobs before they hit the
+Python bridge: missing book id, unsupported output format, missing Piper exe, or
+missing `audio.cpp` executable/model.
 
 Python fallback UI:
 

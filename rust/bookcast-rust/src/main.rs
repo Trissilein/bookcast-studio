@@ -44,6 +44,7 @@ export component AppWindow inherits Window {
     in-out property <int> podcast-mode-index: 0;
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
+    in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
     in-out property <int> current-view: 0;
 
@@ -159,6 +160,12 @@ export component AppWindow inherits Window {
                             ComboBox {
                                 model: ["Windows SAPI via Python bridge", "Piper local process", "audio.cpp external process"];
                                 current-index <=> root.engine-index;
+                            }
+                            Text {
+                                text: root.render-plan-text;
+                                color: rgb(45, 69, 58);
+                                font-size: 13px;
+                                wrap: word-wrap;
                             }
                             Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
 
@@ -690,10 +697,13 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     app.on_sample_render(move || {
         let Some(app) = weak.upgrade() else { return };
         let book_id = app.get_book_id().to_string();
-        if book_id.trim().is_empty() {
-            app.set_status_text("Sample render needs a book id.".into());
+        if let Some(problem) = render_preflight_problem(&app, &book_id) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            app.set_render_plan_text(render_plan_text(&app).into());
             return;
         }
+        app.set_render_plan_text(render_plan_text(&app).into());
         let args = render_args(&app, "sample-render", book_id);
         run_bridge(app.as_weak(), sample_state.clone(), "sample render", args);
     });
@@ -703,10 +713,13 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     app.on_render_book(move || {
         let Some(app) = weak.upgrade() else { return };
         let book_id = app.get_book_id().to_string();
-        if book_id.trim().is_empty() {
-            app.set_status_text("Render needs a book id. Use Refresh Books after import.".into());
+        if let Some(problem) = render_preflight_problem(&app, &book_id) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            app.set_render_plan_text(render_plan_text(&app).into());
             return;
         }
+        app.set_render_plan_text(render_plan_text(&app).into());
         let args = render_args(&app, "render", book_id);
         run_bridge(app.as_weak(), render_state.clone(), "render", args);
     });
@@ -1170,6 +1183,72 @@ fn ollama_args(app: &AppWindow) -> Vec<String> {
         "--model".into(),
         app.get_ollama_model().to_string(),
     ]
+}
+
+fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
+    render_preflight_problem_from(
+        book_id,
+        &app.get_output_format().to_string(),
+        app.get_engine_index(),
+        &app.get_piper_exe().to_string(),
+        &app.get_audio_cpp_exe().to_string(),
+        &app.get_audio_cpp_model().to_string(),
+    )
+}
+
+fn render_preflight_problem_from(
+    book_id: &str,
+    output_format: &str,
+    engine_index: i32,
+    piper_exe: &str,
+    audio_cpp_exe: &str,
+    audio_cpp_model: &str,
+) -> Option<String> {
+    if book_id.trim().is_empty() {
+        return Some("Render needs a book id. Import a book or click Refresh Books.".to_string());
+    }
+    if !matches!(
+        output_format.trim().to_lowercase().as_str(),
+        "opus" | "mp3" | "wav" | "m4b"
+    ) {
+        return Some("Output must be opus, mp3, wav, or m4b.".to_string());
+    }
+    if engine_index == 1 && piper_exe.trim().is_empty() {
+        return Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.".to_string());
+    }
+    if engine_index == 2 {
+        if audio_cpp_exe.trim().is_empty() {
+            return Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.".to_string());
+        }
+        if audio_cpp_model.trim().is_empty() {
+            return Some(
+                "audio.cpp selected, but model is missing. Set audio.cpp model before rendering."
+                    .to_string(),
+            );
+        }
+    }
+    None
+}
+
+fn render_plan_text(app: &AppWindow) -> String {
+    let engine = match app.get_engine_index() {
+        1 => "Piper",
+        2 => "audio.cpp",
+        _ => "Windows SAPI",
+    };
+    let book = app.get_book_id().to_string();
+    let output = app.get_output_format().to_string();
+    let voice = app.get_voice_name().to_string();
+    let voice = if voice.trim().is_empty() {
+        "default voice".to_string()
+    } else {
+        voice
+    };
+    format!(
+        "Render plan: book {}, engine {engine}, voice {voice}, output {}. Run sample first; full render uses same settings.",
+        if book.trim().is_empty() { "(none)" } else { book.trim() },
+        if output.trim().is_empty() { "opus" } else { output.trim() }
+    )
 }
 
 fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
@@ -2052,4 +2131,42 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
             app.set_audio_cpp_status(text.into());
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_preflight_problem_from;
+
+    #[test]
+    fn render_preflight_requires_book_id() {
+        assert_eq!(
+            render_preflight_problem_from("", "opus", 0, "", "", "").as_deref(),
+            Some("Render needs a book id. Import a book or click Refresh Books.")
+        );
+    }
+
+    #[test]
+    fn render_preflight_rejects_unknown_output_format() {
+        assert_eq!(
+            render_preflight_problem_from("book-1", "flac", 0, "", "", "").as_deref(),
+            Some("Output must be opus, mp3, wav, or m4b.")
+        );
+    }
+
+    #[test]
+    fn render_preflight_requires_audio_cpp_model() {
+        assert_eq!(
+            render_preflight_problem_from("book-1", "opus", 2, "", "audiocpp_cli.exe", "")
+                .as_deref(),
+            Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
+        );
+    }
+
+    #[test]
+    fn render_preflight_accepts_configured_piper() {
+        assert_eq!(
+            render_preflight_problem_from("book-1", "m4b", 1, "piper.exe", "", ""),
+            None
+        );
+    }
 }
