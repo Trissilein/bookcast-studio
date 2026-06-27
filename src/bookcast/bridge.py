@@ -514,6 +514,17 @@ def _book_preview_payload(library: BookLibrary, book_id: str, max_chars: int = 1
             for chapter in chapters
         ],
         "chunk_count": len(chunks),
+        "chunks": [
+            {
+                "chapter_index": chunk["chapter_index"],
+                "chunk_index": chunk["chunk_index"],
+                "chars": len(str(chunk["text"])),
+                "text_hash": chunk["text_hash"],
+                "status": chunk["status"],
+                "preview": str(chunk["text"]).strip().replace("\r\n", "\n")[:240],
+            }
+            for chunk in chunks[:12]
+        ],
         "first_chunk": chunks[0] if chunks else None,
         "preview": "\n\n".join(preview_parts)[:max_chars],
     }

@@ -214,6 +214,9 @@ def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypat
     assert preview_events[0]["event"] == "book_preview"
     assert preview_events[0]["book"]["title"] == "Preview Book"
     assert preview_events[0]["chunk_count"] >= 1
+    assert preview_events[0]["chunks"][0]["chars"] >= len("First sample chunk")
+    assert preview_events[0]["chunks"][0]["text_hash"]
+    assert "First sample chunk" in preview_events[0]["chunks"][0]["preview"]
     assert "First sample chunk" in preview_events[0]["preview"]
 
     class FakeProvider(TtsProvider):

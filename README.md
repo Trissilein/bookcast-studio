@@ -67,6 +67,8 @@ After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
 The Import Wizard uses the selected cleanup profile for both local and Calibre
 imports, so chunking can be chosen before text enters the library.
+Book previews now show chapter summaries plus the first chunk hashes, lengths,
+statuses, and text excerpts, which makes cleanup/chunking verifiable before TTS.
 
 Python fallback UI:
 

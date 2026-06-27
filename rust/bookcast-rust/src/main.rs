@@ -2340,10 +2340,45 @@ fn handle_bridge_events(
                             .join("\n")
                     })
                     .unwrap_or_default();
+                let chunks = value
+                    .get("chunks")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(12)
+                            .map(|chunk| {
+                                let chapter = chunk
+                                    .get("chapter_index")
+                                    .and_then(Value::as_i64)
+                                    .unwrap_or(0);
+                                let index = chunk
+                                    .get("chunk_index")
+                                    .and_then(Value::as_i64)
+                                    .unwrap_or(0);
+                                let chars = chunk.get("chars").and_then(Value::as_i64).unwrap_or(0);
+                                let hash =
+                                    chunk.get("text_hash").and_then(Value::as_str).unwrap_or("");
+                                let status =
+                                    chunk.get("status").and_then(Value::as_str).unwrap_or("");
+                                let preview =
+                                    chunk.get("preview").and_then(Value::as_str).unwrap_or("");
+                                format!(
+                                    "c{chapter}.{index} | {chars} chars | {} | {status}\n{preview}",
+                                    short_hash(hash)
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "No chunks generated.".to_string());
                 let preview = value.get("preview").and_then(Value::as_str).unwrap_or("");
                 set_book_preview(
                     weak.clone(),
-                    &format!("{author} - {title}\n{chunk_count} chunks\n\n{chapters}\n\n{preview}"),
+                    &format!(
+                        "{author} - {title}\n{chunk_count} chunks\n\nChapters\n{chapters}\n\nChunks\n{chunks}\n\nText Preview\n{preview}"
+                    ),
                 );
                 set_current_view(weak.clone(), 0);
                 set_guide(
