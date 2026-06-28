@@ -61,6 +61,8 @@ inspection from each output view.
 TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
 shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.
+TTS Studio also has a free-text TTS test that writes a WAV through the selected
+engine without needing a book.
 The Library view can load cleanup profiles and apply one to the selected book;
 that rechunks the book and refreshes the preview before rendering.
 Path fields for library, imports, Calibre, Piper, and `audio.cpp` have native
@@ -103,6 +105,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
 .\.venv\Scripts\bookcast bridge voices
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
+.\.venv\Scripts\bookcast bridge tts-test --library .\library --text "Engine smoke test."
 .\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge cleanup-profiles --library .\library

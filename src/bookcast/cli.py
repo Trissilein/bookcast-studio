@@ -119,6 +119,20 @@ def main(argv: list[str] | None = None) -> int:
     bridge_voices.add_argument("--piper-voice-dir", default=None)
     bridge_voices.add_argument("--piper-model", default=None)
 
+    bridge_tts_test = bridge_sub.add_parser("tts-test", help="Synthesize free text through a TTS provider")
+    bridge_tts_test.add_argument("--library", type=Path, required=True)
+    bridge_tts_test.add_argument("--text", required=True)
+    bridge_tts_test.add_argument("--voice", default=None)
+    bridge_tts_test.add_argument("--rate", type=int, default=0)
+    bridge_tts_test.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
+    bridge_tts_test.add_argument("--audio-cpp-exe", default=None)
+    bridge_tts_test.add_argument("--audio-cpp-model", default=None)
+    bridge_tts_test.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_tts_test.add_argument("--audio-cpp-family", default=None)
+    bridge_tts_test.add_argument("--piper-exe", default=None)
+    bridge_tts_test.add_argument("--piper-voice-dir", default=None)
+    bridge_tts_test.add_argument("--piper-model", default=None)
+
     bridge_audio_cpp = bridge_sub.add_parser("audio-cpp-health", help="Validate local audio.cpp configuration")
     bridge_audio_cpp.add_argument("--audio-cpp-exe", default=None)
     bridge_audio_cpp.add_argument("--audio-cpp-model", default=None)
@@ -240,6 +254,23 @@ def main(argv: list[str] | None = None) -> int:
         if args.bridge_command == "voices":
             return bridge.run_safely(
                 bridge.voices,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
+            )
+        if args.bridge_command == "tts-test":
+            return bridge.run_safely(
+                bridge.tts_test,
+                args.library,
+                args.text,
+                "wav",
+                args.voice,
+                args.rate,
                 args.provider,
                 args.audio_cpp_exe,
                 args.audio_cpp_model,

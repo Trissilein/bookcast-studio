@@ -26,6 +26,7 @@ export component AppWindow inherits Window {
     in-out property <string> voice-list-text: "Discover voices before choosing one.";
     in-out property <string> output-format: "opus";
     in-out property <string> render-limit: "";
+    in-out property <string> tts-test-text: "BookCast engine test.";
     in-out property <string> last-output-path: "";
     in-out property <string> output-list-text: "No outputs loaded.";
     in-out property <string> audio-cpp-exe: "";
@@ -76,6 +77,7 @@ export component AppWindow inherits Window {
     callback apply-cleanup-profile();
     callback sample-render();
     callback render-book();
+    callback tts-test();
     callback suggest-characters();
     callback podcast-script();
     callback podcast-render();
@@ -226,6 +228,9 @@ export component AppWindow inherits Window {
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
+                            Text { text: "TTS test text"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.tts-test-text; }
+                            Button { text: "Render TTS Test"; clicked => { root.tts-test(); } }
 
                             Text {
                                 visible: root.engine-index == 0;
@@ -668,6 +673,7 @@ struct WorkbenchSettings {
     voice_name: String,
     output_format: String,
     render_limit: String,
+    tts_test_text: String,
     last_output_path: String,
     audio_cpp_exe: String,
     audio_cpp_model: String,
@@ -1085,6 +1091,27 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             next_state.clone(),
             "preview",
             preview_args(&app, book_id),
+        );
+    });
+
+    let weak = app.as_weak();
+    let tts_test_state = state.clone();
+    app.on_tts_test(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let text = app.get_tts_test_text().to_string();
+        if text.trim().is_empty() {
+            app.set_status_text("TTS test needs text.".into());
+            return;
+        }
+        if app.get_engine_index() == 2 && app.get_audio_cpp_model().to_string().trim().is_empty() {
+            app.set_status_text("audio.cpp TTS test needs a model.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            tts_test_state.clone(),
+            "tts test",
+            tts_test_args(&app),
         );
     });
 
@@ -1519,6 +1546,9 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_output_format(settings.output_format.into());
     }
     app.set_render_limit(settings.render_limit.into());
+    if !settings.tts_test_text.is_empty() {
+        app.set_tts_test_text(settings.tts_test_text.into());
+    }
     app.set_last_output_path(settings.last_output_path.into());
     if !settings.audio_cpp_exe.is_empty() {
         app.set_audio_cpp_exe(settings.audio_cpp_exe.into());
@@ -1569,6 +1599,7 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         voice_name: app.get_voice_name().to_string(),
         output_format: app.get_output_format().to_string(),
         render_limit: app.get_render_limit().to_string(),
+        tts_test_text: app.get_tts_test_text().to_string(),
         last_output_path: app.get_last_output_path().to_string(),
         audio_cpp_exe: app.get_audio_cpp_exe().to_string(),
         audio_cpp_model: app.get_audio_cpp_model().to_string(),
@@ -1822,6 +1853,43 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
 
 fn voice_args(app: &AppWindow) -> Vec<String> {
     let mut args = vec!["bridge".into(), "voices".into()];
+    if app.get_engine_index() == 1 {
+        args.extend(piper_args(app));
+    } else if app.get_engine_index() == 2 {
+        args.extend(["--provider".into(), "audio_cpp".into()]);
+        args.extend([
+            "--audio-cpp-exe".into(),
+            app.get_audio_cpp_exe().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-model".into(),
+            app.get_audio_cpp_model().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-backend".into(),
+            app.get_audio_cpp_backend().to_string(),
+        ]);
+        let family = app.get_audio_cpp_family().to_string();
+        if !family.trim().is_empty() {
+            args.extend(["--audio-cpp-family".into(), family]);
+        }
+    }
+    args
+}
+
+fn tts_test_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        "tts-test".into(),
+        "--library".into(),
+        app.get_library_path().to_string(),
+        "--text".into(),
+        app.get_tts_test_text().to_string(),
+    ];
+    let voice = app.get_voice_name().to_string();
+    if !voice.trim().is_empty() {
+        args.extend(["--voice".into(), voice]);
+    }
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
     } else if app.get_engine_index() == 2 {
@@ -2342,6 +2410,22 @@ fn handle_bridge_events(
                     set_guide(
                         weak.clone(),
                         "Outputs loaded. Open File plays newest output; Open Folder opens its folder.",
+                    );
+                }
+            }
+            Some("tts_test") => {
+                let provider = value
+                    .get("provider")
+                    .and_then(Value::as_str)
+                    .unwrap_or("tts");
+                let chars = value.get("chars").and_then(Value::as_i64).unwrap_or(0);
+                if let Some(output) = value.get("output").and_then(Value::as_str) {
+                    set_last_output(weak.clone(), output);
+                    set_guide(
+                        weak.clone(),
+                        &format!(
+                            "TTS test rendered with {provider} ({chars} chars). Use Open File to play it."
+                        ),
                     );
                 }
             }

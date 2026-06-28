@@ -291,6 +291,51 @@ def test_bridge_voices_emit_provider_voices(capsys, monkeypatch) -> None:
     ]
 
 
+def test_bridge_tts_test_writes_wav(tmp_path: Path, capsys, monkeypatch) -> None:
+    class FakeProvider(TtsProvider):
+        id = "fake"
+
+        def health(self) -> bool:
+            return True
+
+        def list_voices(self) -> list[TtsVoice]:
+            return []
+
+        def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
+            output_wav.parent.mkdir(parents=True, exist_ok=True)
+            output_wav.write_bytes(f"{text}|{voice}|{rate}".encode("utf-8"))
+
+    monkeypatch.setattr("bookcast.bridge.WindowsSapiProvider", FakeProvider)
+
+    result = main(
+        [
+            "bridge",
+            "tts-test",
+            "--library",
+            str(tmp_path / "library"),
+            "--text",
+            "Engine smoke.",
+            "--voice",
+            "Voice A",
+            "--rate",
+            "1",
+        ]
+    )
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in events] == [
+        "job_started",
+        "job_progress",
+        "job_progress",
+        "tts_test",
+        "job_done",
+    ]
+    output = Path(str(events[-1]["output"]))
+    assert output.exists()
+    assert output.read_bytes() == b"Engine smoke.|Voice A|1"
+
+
 def test_bridge_audio_cpp_health_reports_missing_config(tmp_path: Path, capsys, monkeypatch) -> None:
     monkeypatch.setattr("bookcast.bridge.DEFAULT_AUDIO_CPP_EXE", tmp_path / "missing.exe")
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +68,48 @@ def voices(
         provider=tts_provider.id,
         voices=[voice.__dict__ for voice in tts_provider.list_voices()],
     )
+    return 0
+
+
+def tts_test(
+    library_root: Path,
+    text: str,
+    output_format: str = "wav",
+    voice: str | None = None,
+    rate: int = 0,
+    provider: str = "windows_sapi",
+    audio_cpp_exe: str | None = None,
+    audio_cpp_model: str | None = None,
+    audio_cpp_backend: str = "cpu",
+    audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
+) -> int:
+    text = text.strip()
+    if not text:
+        raise ValueError("TTS test text is required")
+    if output_format != "wav":
+        raise ValueError("TTS test currently writes WAV only")
+    tts_provider = _tts_provider(
+        provider,
+        audio_cpp_exe=audio_cpp_exe,
+        audio_cpp_model=audio_cpp_model,
+        audio_cpp_backend=audio_cpp_backend,
+        audio_cpp_family=audio_cpp_family,
+        piper_exe=piper_exe,
+        piper_voice_dir=piper_voice_dir,
+        piper_model=piper_model,
+    )
+    emit("job_started", job="tts_test", provider=tts_provider.id, chars=len(text))
+    output_dir = Path(library_root) / "diagnostics" / "tts_tests"
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    output = output_dir / f"{stamp}_{tts_provider.id}.wav"
+    emit("job_progress", job="tts_test", progress=20)
+    tts_provider.synthesize(text, output, voice=voice, rate=rate)
+    emit("job_progress", job="tts_test", progress=100)
+    emit("tts_test", provider=tts_provider.id, output=str(output), chars=len(text), voice=voice or "")
+    emit("job_done", job="tts_test", output=str(output))
     return 0
 
 
