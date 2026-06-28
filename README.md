@@ -101,6 +101,7 @@ Python fallback UI:
 Packaged Windows build:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\readiness_check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui_launch_smoke.ps1
 .\dist\bookcast-studio-windows\bookcast-studio.exe
@@ -117,6 +118,8 @@ checks output registration, and validates rendered audio duration with `ffprobe`
 If the local Trispr-Flow Piper install exists, it also renders a Piper sample.
 The UI launch smoke starts the packaged desktop app briefly and fails if it exits
 early.
+`readiness_check.ps1` runs the full build, acceptance smoke, UI launch smoke, and
+prints the packaged executable path for manual testing.
 
 ## Import From CLI
 
