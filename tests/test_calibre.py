@@ -65,6 +65,7 @@ def test_calibre_import_uses_external_id_for_dedupe(tmp_path: Path) -> None:
 def test_calibre_diagnose_explains_wrong_folder(tmp_path: Path, monkeypatch) -> None:
     wrong_folder = tmp_path / "Author Name"
     wrong_folder.mkdir()
+    (tmp_path / "metadata.db").write_text("", encoding="utf-8")
     monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
 
     diagnostic = diagnose_calibre_library(wrong_folder)
@@ -72,7 +73,25 @@ def test_calibre_diagnose_explains_wrong_folder(tmp_path: Path, monkeypatch) -> 
     assert diagnostic["healthy"] is False
     assert diagnostic["metadata_db_exists"] is False
     assert diagnostic["issues"] == [f"metadata.db not found in: {wrong_folder}"]
-    assert diagnostic["hints"] == ["Choose the Calibre library root folder, not an author/book subfolder."]
+    assert diagnostic["suggested_library"] == str(tmp_path)
+    assert diagnostic["hints"] == [f"Selected folder looks like a Calibre subfolder. Use parent library: {tmp_path}"]
+
+
+def test_calibre_diagnose_lists_child_library_candidates(tmp_path: Path, monkeypatch) -> None:
+    parent = tmp_path / "Books"
+    library = parent / "Calibre Library"
+    library.mkdir(parents=True)
+    (library / "metadata.db").write_text("", encoding="utf-8")
+    monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
+
+    diagnostic = diagnose_calibre_library(parent)
+
+    assert diagnostic["healthy"] is False
+    assert diagnostic["metadata_db_exists"] is False
+    assert diagnostic["candidate_libraries"] == [str(library)]
+    assert diagnostic["hints"] == [
+        "Selected folder contains possible Calibre libraries. Choose one candidate below, not the parent folder."
+    ]
 
 
 class _FakeCalibreClient:

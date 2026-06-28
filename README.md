@@ -150,6 +150,9 @@ The Rust Import Wizard diagnoses wrong folders, missing `metadata.db`, missing
 It exposes this as an explicit `Diagnose Calibre` step before `Scan Calibre`.
 Calibre scan/import can be limited from the wizard, defaulting to 50 books, so
 large libraries can be tested in bounded batches.
+If the selected folder is too high or too deep, the wizard shows suggested
+parent/child library folders. Scans fill visible Calibre IDs into the import
+field; remove IDs you do not want before importing.
 Local import accepts either a single supported file or a folder; folder import
 recursively imports TXT, MD, EPUB, DOCX, and PDF files while skipping unrelated files.
 

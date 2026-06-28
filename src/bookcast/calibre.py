@@ -98,6 +98,8 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
     issues: list[str] = []
     hints: list[str] = []
     metadata_db = path / "metadata.db"
+    suggested_library = ""
+    candidate_libraries: list[str] = []
     readable = False
     sample_count: int | None = None
 
@@ -108,8 +110,21 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
         issues.append(f"Calibre library path is not a folder: {path}")
         hints.append("Choose the folder that contains metadata.db.")
     elif not metadata_db.exists():
-        issues.append(f"metadata.db not found in: {path}")
-        hints.append("Choose the Calibre library root folder, not an author/book subfolder.")
+        parent_db = path.parent / "metadata.db"
+        if parent_db.exists():
+            suggested_library = str(path.parent)
+            issues.append(f"metadata.db not found in: {path}")
+            hints.append(f"Selected folder looks like a Calibre subfolder. Use parent library: {path.parent}")
+        else:
+            candidate_libraries = _child_calibre_libraries(path)
+            if candidate_libraries:
+                issues.append(f"metadata.db not found in: {path}")
+                hints.append(
+                    "Selected folder contains possible Calibre libraries. Choose one candidate below, not the parent folder."
+                )
+            else:
+                issues.append(f"metadata.db not found in: {path}")
+                hints.append("Choose the Calibre library root folder, not an author/book subfolder.")
 
     if not executable:
         issues.append("calibredb not found")
@@ -130,12 +145,30 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
         "is_dir": path.is_dir(),
         "metadata_db": str(metadata_db),
         "metadata_db_exists": metadata_db.exists(),
+        "suggested_library": suggested_library,
+        "candidate_libraries": candidate_libraries,
         "calibredb": executable or "",
         "readable": readable,
         "sample_count": sample_count,
         "issues": issues,
         "hints": hints,
     }
+
+
+def _child_calibre_libraries(path: Path, limit: int = 8) -> list[str]:
+    if not path.is_dir():
+        return []
+    candidates: list[str] = []
+    try:
+        children = sorted(path.iterdir(), key=lambda item: item.name.lower())
+    except OSError:
+        return []
+    for child in children:
+        if len(candidates) >= limit:
+            break
+        if child.is_dir() and (child / "metadata.db").exists():
+            candidates.append(str(child))
+    return candidates
 
 
 def find_calibredb() -> str | None:

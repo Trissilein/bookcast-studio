@@ -933,6 +933,12 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text(problem.into());
             return;
         }
+        let ids = split_ids(&app.get_calibre_ids().to_string());
+        if ids.is_empty() {
+            app.set_status_text("Calibre import needs IDs. Run Scan Calibre, then remove IDs you do not want.".into());
+            app.set_guide_text("Scan Calibre fills Calibre IDs with the visible importable books. Edit that field, then import.".into());
+            return;
+        }
         let mut args = vec![
             "bridge".into(),
             "calibre-import".into(),
@@ -940,7 +946,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             "--library".into(),
             app.get_library_path().to_string(),
         ];
-        for id in split_ids(&app.get_calibre_ids().to_string()) {
+        for id in ids {
             args.extend(["--id".into(), id]);
         }
         let profile = app.get_cleanup_profile_name().to_string();
@@ -2454,15 +2460,35 @@ fn handle_bridge_events(
                     .get("metadata_db_exists")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
+                let sample_count = value
+                    .get("sample_count")
+                    .and_then(Value::as_i64)
+                    .map(|count| count.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let suggested = value
+                    .get("suggested_library")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let candidates = json_string_list(&value, "candidate_libraries");
                 let issues = json_string_list(&value, "issues");
                 let hints = json_string_list(&value, "hints");
                 let detail = if healthy {
                     format!(
-                        "Calibre OK\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}"
+                        "Calibre OK\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}\nSample scan: {sample_count} book(s)"
                     )
                 } else {
+                    let suggestion = if !suggested.is_empty() {
+                        format!("\nSuggested library:\n{suggested}")
+                    } else {
+                        String::new()
+                    };
+                    let candidates = if !candidates.is_empty() {
+                        format!("\nCandidate libraries:\n{candidates}")
+                    } else {
+                        String::new()
+                    };
                     format!(
-                        "Calibre problem\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}\n\nIssues:\n{issues}\n\nHints:\n{hints}"
+                        "Calibre problem\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}{suggestion}{candidates}\n\nIssues:\n{issues}\n\nHints:\n{hints}"
                     )
                 };
                 set_calibre_preview(weak.clone(), &detail);
@@ -2709,6 +2735,16 @@ fn handle_bridge_events(
                 let books = value.get("books").and_then(Value::as_array);
                 let count = books.map_or(0, Vec::len);
                 let skipped = value.get("skipped").and_then(Value::as_i64).unwrap_or(0);
+                let selected_ids = books
+                    .map(|items| {
+                        items
+                            .iter()
+                            .take(20)
+                            .filter_map(|book| book.get("id").and_then(Value::as_str))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
                 let preview = books
                     .map(|items| {
                         items
@@ -2737,17 +2773,18 @@ fn handle_bridge_events(
                     })
                     .filter(|text| !text.is_empty())
                     .unwrap_or_else(|| "No importable Calibre books found.".to_string());
+                let preview = if selected_ids.is_empty() {
+                    preview
+                } else {
+                    format!("IDs selected for import: {selected_ids}\n\n{preview}")
+                };
                 set_calibre_preview(weak.clone(), &preview);
-                if let Some(first_id) = books
-                    .and_then(|items| items.first())
-                    .and_then(|book| book.get("id"))
-                    .and_then(Value::as_str)
-                {
-                    set_calibre_ids(weak.clone(), first_id);
+                if !selected_ids.is_empty() {
+                    set_calibre_ids(weak.clone(), &selected_ids);
                 }
                 set_guide(
                     weak.clone(),
-                    &format!("Calibre scan found {count} importable books, skipped {skipped}. Edit Calibre IDs, then import."),
+                    &format!("Calibre scan found {count} importable books, skipped {skipped}. Calibre IDs now contains visible books; remove IDs you do not want, then import."),
                 );
             }
             Some("calibre_imported") => {
@@ -3074,6 +3111,7 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::render_preflight_problem_from;
+    use super::split_ids;
     use super::tts_test_preflight_problem_from;
 
     #[test]
@@ -3146,6 +3184,19 @@ mod tests {
         assert_eq!(
             optional_positive_limit_problem("-1", "Calibre limit").as_deref(),
             Some("Calibre limit must be empty or a positive whole number.")
+        );
+    }
+
+    #[test]
+    fn split_ids_accepts_commas_semicolons_and_whitespace() {
+        assert_eq!(
+            split_ids("7, 8;9\n10"),
+            vec![
+                "7".to_string(),
+                "8".to_string(),
+                "9".to_string(),
+                "10".to_string()
+            ]
         );
     }
 
