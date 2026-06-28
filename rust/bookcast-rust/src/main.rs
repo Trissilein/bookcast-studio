@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 slint::slint! {
-import { Button, ComboBox, LineEdit } from "std-widgets.slint";
+import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     title: "BookCast Studio";
@@ -44,6 +44,9 @@ export component AppWindow inherits Window {
     in-out property <string> book-preview-text: "Select or import a book, then load preview.";
     in-out property <string> cleanup-profile-name: "standard";
     in-out property <string> cleanup-profiles-text: "Load cleanup profiles before changing chunking.";
+    in-out property <string> chapter-edit-index: "0";
+    in-out property <string> chapter-edit-title: "";
+    in-out property <string> chapter-edit-text: "";
     in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
@@ -78,6 +81,8 @@ export component AppWindow inherits Window {
     callback load-preview();
     callback previous-book();
     callback next-book();
+    callback load-chapter();
+    callback save-chapter();
     callback load-cleanup-profiles();
     callback apply-cleanup-profile();
     callback sample-render();
@@ -463,6 +468,34 @@ export component AppWindow inherits Window {
                                 color: rgb(70, 80, 74);
                                 font-size: 13px;
                                 wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Chapter Editor"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Load one chapter from the selected book, edit title/text, then Save + Rechunk before rendering.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Chapter index"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.chapter-edit-index; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Chapter title"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.chapter-edit-title; }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Load Chapter"; clicked => { root.load-chapter(); } }
+                                Button { text: "Save + Rechunk"; clicked => { root.save-chapter(); } }
+                            }
+                            TextEdit {
+                                height: 130px;
+                                text <=> root.chapter-edit-text;
                             }
                             Text { text: "Last Output"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.last-output-path; }
@@ -1204,6 +1237,80 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    let chapter_state = state.clone();
+    app.on_load_chapter(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Chapter load needs a book id.".into());
+            return;
+        }
+        let Ok(chapter_index) = parse_chapter_index(&app.get_chapter_edit_index().to_string())
+        else {
+            app.set_status_text("Chapter index must be zero or a positive whole number.".into());
+            return;
+        };
+        run_bridge(
+            app.as_weak(),
+            chapter_state.clone(),
+            "chapter",
+            vec![
+                "bridge".into(),
+                "chapter-detail".into(),
+                book_id,
+                "--library".into(),
+                app.get_library_path().to_string(),
+                "--chapter-index".into(),
+                chapter_index.to_string(),
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let chapter_save_state = state.clone();
+    app.on_save_chapter(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Chapter save needs a book id.".into());
+            return;
+        }
+        let Ok(chapter_index) = parse_chapter_index(&app.get_chapter_edit_index().to_string())
+        else {
+            app.set_status_text("Chapter index must be zero or a positive whole number.".into());
+            return;
+        };
+        let title = app.get_chapter_edit_title().to_string();
+        let text = app.get_chapter_edit_text().to_string();
+        if title.trim().is_empty() {
+            app.set_status_text("Chapter save needs a title.".into());
+            return;
+        }
+        if text.trim().is_empty() {
+            app.set_status_text("Chapter save needs text.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            chapter_save_state.clone(),
+            "chapter save",
+            vec![
+                "bridge".into(),
+                "update-chapter".into(),
+                book_id,
+                "--library".into(),
+                app.get_library_path().to_string(),
+                "--chapter-index".into(),
+                chapter_index.to_string(),
+                "--title".into(),
+                title,
+                "--text".into(),
+                text,
+            ],
+        );
+    });
+
+    let weak = app.as_weak();
     let tts_test_state = state.clone();
     app.on_tts_test(move || {
         let Some(app) = weak.upgrade() else { return };
@@ -1886,6 +1993,13 @@ fn optional_positive_limit_problem(limit: &str, label: &str) -> Option<String> {
         Ok(value) if value > 0 => None,
         _ => Some(format!("{label} must be empty or a positive whole number.")),
     }
+}
+
+fn parse_chapter_index(value: &str) -> Result<u32, String> {
+    value
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| "Chapter index must be zero or a positive whole number.".to_string())
 }
 
 fn engine_check_problem_from(
@@ -2921,10 +3035,39 @@ fn handle_bridge_events(
                     "Books loaded. First book id is selected automatically if the field was empty.",
                 );
             }
+            Some("chapter_detail") => {
+                let index = value
+                    .get("chapter_index")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0)
+                    .to_string();
+                let title = value.get("title").and_then(Value::as_str).unwrap_or("");
+                let text = value.get("text").and_then(Value::as_str).unwrap_or("");
+                set_chapter_edit_index(weak.clone(), &index);
+                set_chapter_edit_title(weak.clone(), title);
+                set_chapter_edit_text(weak.clone(), text);
+                set_current_view(weak.clone(), 2);
+                set_guide(weak.clone(), "Chapter loaded. Edit, then Save + Rechunk.");
+            }
+            Some("chapter_updated") => {
+                let index = value
+                    .get("chapter_index")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                set_current_view(weak.clone(), 2);
+                set_guide(
+                    weak.clone(),
+                    &format!("Chapter {index} saved. Preview refreshes with new chunks."),
+                );
+            }
             Some("book_preview") => {
                 let book = value.get("book").unwrap_or(&Value::Null);
                 let title = book.get("title").and_then(Value::as_str).unwrap_or("");
                 let author = book.get("author").and_then(Value::as_str).unwrap_or("");
+                let preview_context = value
+                    .get("preview_context")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 if let Some(profile) = book.get("cleanup_profile").and_then(Value::as_str) {
                     set_cleanup_profile_name(weak.clone(), profile);
                 }
@@ -2985,6 +3128,26 @@ fn handle_bridge_events(
                     })
                     .filter(|text| !text.is_empty())
                     .unwrap_or_else(|| "No chunks generated.".to_string());
+                if preview_context != "update_chapter" {
+                    if let Some(first_chapter) = value
+                        .get("chapters")
+                        .and_then(Value::as_array)
+                        .and_then(|items| items.first())
+                    {
+                        let index = first_chapter
+                            .get("index")
+                            .and_then(Value::as_i64)
+                            .unwrap_or(0)
+                            .to_string();
+                        let title = first_chapter
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        set_chapter_edit_index(weak.clone(), &index);
+                        set_chapter_edit_title(weak.clone(), title);
+                        set_chapter_edit_text(weak.clone(), "");
+                    }
+                }
                 let preview = value.get("preview").and_then(Value::as_str).unwrap_or("");
                 set_book_preview(
                     weak.clone(),
@@ -2992,11 +3155,19 @@ fn handle_bridge_events(
                         "{author} - {title}\n{chunk_count} chunks\n\nChapters\n{chapters}\n\nChunks\n{chunks}\n\nText Preview\n{preview}"
                     ),
                 );
-                set_current_view(weak.clone(), 0);
-                set_guide(
-                    weak.clone(),
-                    "Preview loaded. Render sample before full render.",
-                );
+                if preview_context == "update_chapter" {
+                    set_current_view(weak.clone(), 2);
+                    set_guide(
+                        weak.clone(),
+                        "Chapter saved and rechunked. Review chunks, then render sample.",
+                    );
+                } else {
+                    set_current_view(weak.clone(), 0);
+                    set_guide(
+                        weak.clone(),
+                        "Preview loaded. Render sample before full render.",
+                    );
+                }
             }
             Some("calibre_books") => {
                 let books = value.get("books").and_then(Value::as_array);
@@ -3258,6 +3429,33 @@ fn set_cleanup_profile_name(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_chapter_edit_index(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_chapter_edit_index(text.into());
+        }
+    });
+}
+
+fn set_chapter_edit_title(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_chapter_edit_title(text.into());
+        }
+    });
+}
+
+fn set_chapter_edit_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_chapter_edit_text(text.into());
+        }
+    });
+}
+
 fn set_character_text(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let _ = slint::invoke_from_event_loop(move || {
@@ -3429,6 +3627,7 @@ mod tests {
     use super::job_progress_detail;
     use super::optional_positive_limit_problem;
     use super::output_open_target;
+    use super::parse_chapter_index;
     use super::render_preflight_problem_from;
     use super::source_probe_summary;
     use super::split_ids;
@@ -3504,6 +3703,20 @@ mod tests {
         assert_eq!(
             optional_positive_limit_problem("-1", "Calibre limit").as_deref(),
             Some("Calibre limit must be empty or a positive whole number.")
+        );
+    }
+
+    #[test]
+    fn chapter_index_accepts_zero_or_positive_integer() {
+        assert_eq!(parse_chapter_index("0"), Ok(0));
+        assert_eq!(parse_chapter_index(" 12 "), Ok(12));
+        assert_eq!(
+            parse_chapter_index(""),
+            Err("Chapter index must be zero or a positive whole number.".to_string())
+        );
+        assert_eq!(
+            parse_chapter_index("-1"),
+            Err("Chapter index must be zero or a positive whole number.".to_string())
         );
     }
 

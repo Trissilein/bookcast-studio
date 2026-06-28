@@ -152,6 +152,59 @@ def test_bridge_cleanup_profiles_and_rechunk(tmp_path: Path, capsys) -> None:
     assert events[-1]["chunk_count"] >= 1
 
 
+def test_bridge_chapter_detail_and_update_rechunks(tmp_path: Path, capsys) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Chapter Edit.txt"
+    source.write_text("Original text.", encoding="utf-8")
+
+    main(["bridge", "import", str(source), "--library", str(library_root)])
+    book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
+
+    result = main(["bridge", "chapter-detail", book_id, "--library", str(library_root), "--chapter-index", "0"])
+    detail_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert detail_events == [
+        {
+            "event": "chapter_detail",
+            "book_id": book_id,
+            "chapter_index": 0,
+            "title": "Chapter Edit",
+            "text": "Original text.",
+            "chars": len("Original text."),
+        }
+    ]
+
+    result = main(
+        [
+            "bridge",
+            "update-chapter",
+            book_id,
+            "--library",
+            str(library_root),
+            "--chapter-index",
+            "0",
+            "--title",
+            "Edited",
+            "--text",
+            "Updated text for rendering.",
+        ]
+    )
+    update_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in update_events] == [
+        "job_started",
+        "job_progress",
+        "chapter_updated",
+        "book_preview",
+        "job_done",
+    ]
+    assert update_events[2]["title"] == "Edited"
+    assert update_events[3]["preview_context"] == "update_chapter"
+    assert "Updated text" in update_events[3]["preview"]
+
+
 def test_bridge_errors_are_structured(tmp_path: Path, capsys) -> None:
     result = main(["bridge", "import", str(tmp_path / "missing.epub"), "--library", str(tmp_path / "library")])
     events = _events(capsys.readouterr().out)

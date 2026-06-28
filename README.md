@@ -17,7 +17,7 @@ Current slice:
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
 - Interactive podcast sessions with resident Ollama, follow-up prompts, and rendered output.
 - Text cleanup and stable chunk hashes.
-- Editable cleanup profiles and chapter review in the Python UI.
+- Editable cleanup profiles and chapter review/editing in the Python UI and Rust Library view.
 - Character and podcast workbench views in the Rust UI.
 
 Planned later:
@@ -70,6 +70,8 @@ TTS Studio also has a free-text TTS test that writes a WAV through the selected
 engine without needing a book.
 The Library view can load cleanup profiles and apply one to the selected book;
 that rechunks the book and refreshes the preview before rendering.
+The Library view can also load one chapter, edit its title/text, then save and
+rechunk the book before rendering.
 Path fields for library, imports, Calibre, Piper, and `audio.cpp` have native
 Browse buttons so first setup does not depend on manual Windows path typing.
 After `Refresh Books`, TTS Studio and Library can switch books with
@@ -118,6 +120,8 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge cleanup-profiles --library .\library
 .\.venv\Scripts\bookcast bridge set-cleanup-profile <book-id> --library .\library --cleanup-profile standard
+.\.venv\Scripts\bookcast bridge chapter-detail <book-id> --library .\library --chapter-index 0
+.\.venv\Scripts\bookcast bridge update-chapter <book-id> --library .\library --chapter-index 0 --title "Fixed Chapter" --text "Corrected text."
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator

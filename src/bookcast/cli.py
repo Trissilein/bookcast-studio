@@ -160,6 +160,18 @@ def main(argv: list[str] | None = None) -> int:
     bridge_preview.add_argument("--library", type=Path, required=True)
     bridge_preview.add_argument("--max-chars", type=int, default=1400)
 
+    bridge_chapter = bridge_sub.add_parser("chapter-detail", help="Emit one full chapter for editing")
+    bridge_chapter.add_argument("book_id")
+    bridge_chapter.add_argument("--library", type=Path, required=True)
+    bridge_chapter.add_argument("--chapter-index", type=int, required=True)
+
+    bridge_update_chapter = bridge_sub.add_parser("update-chapter", help="Update one chapter and rechunk")
+    bridge_update_chapter.add_argument("book_id")
+    bridge_update_chapter.add_argument("--library", type=Path, required=True)
+    bridge_update_chapter.add_argument("--chapter-index", type=int, required=True)
+    bridge_update_chapter.add_argument("--title", required=True)
+    bridge_update_chapter.add_argument("--text", required=True)
+
     bridge_characters = bridge_sub.add_parser("characters", help="Suggest characters and emit JSONL")
     bridge_characters.add_argument("book_id")
     bridge_characters.add_argument("--library", type=Path, required=True)
@@ -328,6 +340,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.bridge_command == "book-preview":
             return bridge.run_safely(bridge.book_preview, args.library, args.book_id, args.max_chars)
+        if args.bridge_command == "chapter-detail":
+            return bridge.run_safely(bridge.chapter_detail, args.library, args.book_id, args.chapter_index)
+        if args.bridge_command == "update-chapter":
+            return bridge.run_safely(
+                bridge.update_chapter,
+                args.library,
+                args.book_id,
+                args.chapter_index,
+                args.title,
+                args.text,
+            )
         if args.bridge_command == "characters":
             return bridge.run_safely(bridge.characters, args.library, args.book_id, args.ollama_url, args.model)
         if args.bridge_command == "podcast-script":

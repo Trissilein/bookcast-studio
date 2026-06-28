@@ -217,6 +217,48 @@ def book_preview(library_root: Path, book_id: str, max_chars: int = 1400) -> int
     return 0
 
 
+def chapter_detail(library_root: Path, book_id: str, chapter_index: int) -> int:
+    library = BookLibrary(library_root)
+    try:
+        chapters = library.get_chapters(book_id)
+        for chapter in chapters:
+            if int(chapter["chapter_index"]) == chapter_index:
+                emit(
+                    "chapter_detail",
+                    book_id=book_id,
+                    chapter_index=chapter_index,
+                    title=str(chapter["title"]),
+                    text=str(chapter["text"]),
+                    chars=len(str(chapter["text"])),
+                )
+                return 0
+        raise ValueError(f"Chapter not found: {book_id}#{chapter_index}")
+    finally:
+        library.close()
+
+
+def update_chapter(library_root: Path, book_id: str, chapter_index: int, title: str, text: str) -> int:
+    title = title.strip()
+    text = text.strip()
+    if not title:
+        raise ValueError("Chapter title is required")
+    if not text:
+        raise ValueError("Chapter text is required")
+    emit("job_started", job="update_chapter", book_id=book_id, chapter_index=chapter_index)
+    library = BookLibrary(library_root)
+    try:
+        library.update_chapter(book_id, chapter_index, title, text)
+        emit("job_progress", job="update_chapter", progress=100, chapter_index=chapter_index)
+        emit("chapter_updated", book_id=book_id, chapter_index=chapter_index, title=title, chars=len(text))
+        payload = _book_preview_payload(library, book_id)
+        payload["preview_context"] = "update_chapter"
+        emit("book_preview", **payload)
+        emit("job_done", job="update_chapter", book_id=book_id, chapter_index=chapter_index)
+    finally:
+        library.close()
+    return 0
+
+
 def characters(
     library_root: Path,
     book_id: str,
