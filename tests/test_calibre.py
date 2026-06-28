@@ -100,6 +100,38 @@ def test_calibre_diagnose_lists_child_library_candidates(tmp_path: Path, monkeyp
     ]
 
 
+def test_calibre_diagnose_finds_nested_library_candidates(tmp_path: Path, monkeypatch) -> None:
+    selected = tmp_path / "Books"
+    library = selected / "Users" / "Me" / "Calibre Library"
+    library.mkdir(parents=True)
+    (library / "metadata.db").write_text("", encoding="utf-8")
+    monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
+
+    diagnostic = diagnose_calibre_library(selected)
+
+    assert diagnostic["healthy"] is False
+    assert diagnostic["candidate_libraries"] == [str(library)]
+    assert diagnostic["source_file_candidates"] == []
+
+
+def test_calibre_diagnose_explains_raw_ebook_folder(tmp_path: Path, monkeypatch) -> None:
+    selected = tmp_path / "Ebooks"
+    selected.mkdir()
+    book = selected / "book.epub"
+    book.write_text("raw epub placeholder", encoding="utf-8")
+    monkeypatch.setattr("bookcast.calibre.find_calibredb", lambda: "calibredb.exe")
+
+    diagnostic = diagnose_calibre_library(selected)
+
+    assert diagnostic["healthy"] is False
+    assert diagnostic["candidate_libraries"] == []
+    assert diagnostic["source_file_candidates"] == [str(book)]
+    assert diagnostic["source_file_candidate_count"] == 1
+    assert diagnostic["hints"] == [
+        "Selected folder contains supported ebook files but no Calibre metadata.db. Use Import Source -> Folder for raw EPUB/PDF/DOCX/TXT/MD folders, or choose the real Calibre library root."
+    ]
+
+
 class _FakeCalibreClient:
     def __init__(self, library_path: Path, exported: Path) -> None:
         self.library_path = library_path

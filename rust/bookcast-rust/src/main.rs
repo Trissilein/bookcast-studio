@@ -3028,6 +3028,7 @@ fn handle_bridge_events(
                     .and_then(Value::as_str)
                     .unwrap_or("");
                 let candidates = json_string_list(&value, "candidate_libraries");
+                let source_candidates = json_string_list(&value, "source_file_candidates");
                 let issues = json_string_list(&value, "issues");
                 let hints = json_string_list(&value, "hints");
                 let detail = if healthy {
@@ -3045,8 +3046,13 @@ fn handle_bridge_events(
                     } else {
                         String::new()
                     };
+                    let source_candidates = if !source_candidates.is_empty() {
+                        format!("\nSupported source files found:\n{source_candidates}")
+                    } else {
+                        String::new()
+                    };
                     format!(
-                        "Calibre problem\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}{suggestion}{candidates}\n\nIssues:\n{issues}\n\nHints:\n{hints}"
+                        "Calibre problem\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}{suggestion}{candidates}{source_candidates}\n\nIssues:\n{issues}\n\nHints:\n{hints}"
                     )
                 };
                 set_calibre_preview(weak.clone(), &detail);

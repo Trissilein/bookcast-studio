@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 SUPPORTED_IMPORT_FORMATS = ("EPUB", "DOCX", "TXT", "MD", "PDF")
+SUPPORTED_IMPORT_SUFFIXES = tuple(f".{fmt.lower()}" for fmt in SUPPORTED_IMPORT_FORMATS)
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
     metadata_db = path / "metadata.db"
     suggested_library = ""
     candidate_libraries: list[str] = []
+    source_file_candidates: list[str] = []
     readable = False
     sample_count: int | None = None
 
@@ -116,15 +118,21 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
             issues.append(f"metadata.db not found in: {path}")
             hints.append(f"Selected folder looks like a Calibre subfolder. Use parent library: {path.parent}")
         else:
-            candidate_libraries = _child_calibre_libraries(path)
+            candidate_libraries = _calibre_library_candidates(path)
             if candidate_libraries:
                 issues.append(f"metadata.db not found in: {path}")
                 hints.append(
                     "Selected folder contains possible Calibre libraries. Choose one candidate below, not the parent folder."
                 )
             else:
+                source_file_candidates = _supported_source_files(path)
                 issues.append(f"metadata.db not found in: {path}")
-                hints.append("Choose the Calibre library root folder, not an author/book subfolder.")
+                if source_file_candidates:
+                    hints.append(
+                        "Selected folder contains supported ebook files but no Calibre metadata.db. Use Import Source -> Folder for raw EPUB/PDF/DOCX/TXT/MD folders, or choose the real Calibre library root."
+                    )
+                else:
+                    hints.append("Choose the Calibre library root folder, not an author/book subfolder.")
 
     if not executable:
         issues.append("calibredb not found")
@@ -147,6 +155,8 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
         "metadata_db_exists": metadata_db.exists(),
         "suggested_library": suggested_library,
         "candidate_libraries": candidate_libraries,
+        "source_file_candidates": source_file_candidates,
+        "source_file_candidate_count": len(source_file_candidates),
         "calibredb": executable or "",
         "readable": readable,
         "sample_count": sample_count,
@@ -155,20 +165,64 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
     }
 
 
-def _child_calibre_libraries(path: Path, limit: int = 8) -> list[str]:
+def _calibre_library_candidates(path: Path, limit: int = 8, max_depth: int = 4) -> list[str]:
     if not path.is_dir():
         return []
     candidates: list[str] = []
     try:
-        children = sorted(path.iterdir(), key=lambda item: item.name.lower())
+        root_depth = len(path.parts)
+        for current, dirs, files in os_walk_sorted(path):
+            if len(candidates) >= limit:
+                break
+            current_path = Path(current)
+            depth = len(current_path.parts) - root_depth
+            if depth > max_depth:
+                dirs[:] = []
+                continue
+            if "metadata.db" in files:
+                candidates.append(str(current_path))
+                dirs[:] = []
+                continue
+            if depth >= max_depth:
+                dirs[:] = []
     except OSError:
         return []
-    for child in children:
-        if len(candidates) >= limit:
-            break
-        if child.is_dir() and (child / "metadata.db").exists():
-            candidates.append(str(child))
     return candidates
+
+
+def _supported_source_files(path: Path, limit: int = 8, max_depth: int = 4) -> list[str]:
+    if not path.is_dir():
+        return []
+    candidates: list[str] = []
+    try:
+        root_depth = len(path.parts)
+        for current, dirs, files in os_walk_sorted(path):
+            if len(candidates) >= limit:
+                break
+            current_path = Path(current)
+            depth = len(current_path.parts) - root_depth
+            if depth > max_depth:
+                dirs[:] = []
+                continue
+            for name in files:
+                if len(candidates) >= limit:
+                    break
+                if Path(name).suffix.lower() in SUPPORTED_IMPORT_SUFFIXES:
+                    candidates.append(str(current_path / name))
+            if depth >= max_depth:
+                dirs[:] = []
+    except OSError:
+        return []
+    return candidates
+
+
+def os_walk_sorted(path: Path):
+    import os
+
+    for current, dirs, files in os.walk(path):
+        dirs[:] = sorted([name for name in dirs if not name.startswith(".")], key=str.lower)
+        files[:] = sorted(files, key=str.lower)
+        yield current, dirs, files
 
 
 def find_calibredb() -> str | None:
