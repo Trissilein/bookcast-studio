@@ -111,6 +111,10 @@ Fast smoke without packaging:
 .\.venv\Scripts\python .\scripts\acceptance_smoke.py
 ```
 
+The smoke imports a TXT source, renders sample + full Opus through Windows SAPI,
+checks output registration, and validates rendered audio duration with `ffprobe`.
+If the local Trispr-Flow Piper install exists, it also renders a Piper sample.
+
 ## Import From CLI
 
 ```powershell
