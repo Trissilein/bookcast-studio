@@ -90,7 +90,8 @@ Status: Partial / usable prototype.
 - Script generation through Ollama bridge exists.
 - Multi-speaker podcast render exists.
 - Rust views expose static podcast generation and render.
-- Remaining: script editor/review flow, better source citation display, better prompt controls, and real smoke tests with user-selected models.
+- Rust Podcast view shows speaker/turn review guidance and requires confirmed `speaker=voice` mappings.
+- Remaining: true script editor/reuse flow, better source citation display, better prompt controls, and real smoke tests with user-selected models.
 
 ## M6 Interactive Podcast
 

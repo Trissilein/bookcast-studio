@@ -54,6 +54,7 @@ export component AppWindow inherits Window {
     in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
     in-out property <string> character-review-text: "Review checklist: run suggestions, delete false positives, assign voices, then tick confirmation.";
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
+    in-out property <string> podcast-review-text: "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render.";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
@@ -725,6 +726,12 @@ export component AppWindow inherits Window {
                             CheckBox {
                                 text: "I reviewed every speaker=voice assignment";
                                 checked <=> root.speaker-voices-confirmed;
+                            }
+                            Text {
+                                text: root.podcast-review-text;
+                                color: rgb(133, 82, 38);
+                                font-size: 13px;
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -1720,6 +1727,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         }
         if let Err(problem) = confirmed_speaker_voice_entries(&app) {
             app.set_status_text(problem.clone().into());
+            app.set_podcast_review_text(
+                "Assign every speaker=voice pair and tick confirmation before rendering.".into(),
+            );
             app.set_guide_text(problem.into());
             return;
         }
@@ -1750,6 +1760,10 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         }
         if let Err(problem) = confirmed_speaker_voice_entries(&app) {
             app.set_status_text(problem.clone().into());
+            app.set_podcast_review_text(
+                "Assign every speaker=voice pair and tick confirmation before interactive render."
+                    .into(),
+            );
             app.set_guide_text(problem.into());
             return;
         }
@@ -3341,6 +3355,26 @@ fn character_review_text(candidates: Option<&Vec<Value>>) -> String {
     )
 }
 
+fn podcast_review_text(script: &Value, saved_or_output_path: Option<&str>) -> String {
+    let speaker_count = script
+        .get("speakers")
+        .and_then(Value::as_array)
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let turn_count = script
+        .get("turns")
+        .and_then(Value::as_array)
+        .map(|items| items.len())
+        .unwrap_or(0);
+    let path_note = saved_or_output_path
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!(" Saved/output: {path}."))
+        .unwrap_or_default();
+    format!(
+        "Review checklist: {speaker_count} speaker(s), {turn_count} turn(s). Assign every speaker=voice, tick confirmation, then render. Note: Render Podcast generates a fresh script for now; use generated script as review preview.{path_note}"
+    )
+}
+
 fn job_progress_detail(value: &Value) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
@@ -4150,9 +4184,14 @@ fn handle_bridge_events(
                         set_speaker_voice_map(weak.clone(), &speaker_template);
                         set_speaker_voices_confirmed(weak.clone(), false);
                     }
+                    set_podcast_review_text(weak.clone(), &podcast_review_text(script, Some(path)));
                     set_guide(weak.clone(), &format!("Podcast script saved: {path}"));
                 } else if let Some(output) = value.get("output").and_then(Value::as_str) {
                     set_last_output(weak.clone(), output);
+                    set_podcast_review_text(
+                        weak.clone(),
+                        &podcast_review_text(script, Some(output)),
+                    );
                     set_guide(
                         weak.clone(),
                         &format!("Podcast rendered: {output}. Use Open File to play, Open Folder to inspect."),
@@ -4327,6 +4366,15 @@ fn set_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_podcast_text(text.into());
+        }
+    });
+}
+
+fn set_podcast_review_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_podcast_review_text(text.into());
         }
     });
 }
@@ -4565,6 +4613,7 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::parse_chapter_index;
+    use super::podcast_review_text;
     use super::preferred_audio_cpp_family;
     use super::progress_bar;
     use super::queue_action;
@@ -4875,6 +4924,23 @@ mod tests {
         );
         assert!(character_review_text(Some(&candidates)).contains("3 candidate(s)"));
         assert!(character_review_text(None).contains("No candidates"));
+    }
+
+    #[test]
+    fn podcast_review_text_counts_speakers_and_warns_about_fresh_render_script() {
+        let script = json!({
+            "speakers": ["host", "explainer"],
+            "turns": [
+                {"speaker": "host", "text": "Welcome."},
+                {"speaker": "explainer", "text": "Explanation."}
+            ]
+        });
+
+        let review = podcast_review_text(&script, Some("D:\\out\\podcast.json"));
+        assert!(review.contains("2 speaker(s), 2 turn(s)"));
+        assert!(review.contains("Assign every speaker=voice"));
+        assert!(review.contains("generates a fresh script"));
+        assert!(review.contains("D:\\out\\podcast.json"));
     }
 
     #[test]
