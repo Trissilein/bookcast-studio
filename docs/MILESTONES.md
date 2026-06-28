@@ -12,6 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed with Python tests, Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -78,7 +79,8 @@ Status: Partial.
 - Ollama-assisted character suggestions exist.
 - Speaker-to-voice mappings exist.
 - Manual confirmation before multi-speaker render exists.
-- Remaining: proper character review UX, per-character audiobook casting flow, and better confidence/excerpt display.
+- Rust Characters view now seeds an editable `speaker=voice` review template from LLM candidates.
+- Remaining: per-character audiobook casting flow and better confidence/excerpt display.
 
 ## M5 Static Podcast Generator
 
@@ -106,6 +108,7 @@ Status: Mostly done.
 - Python backend remains as JSONL bridge.
 - Structured views exist: TTS Studio, Import, Library, Characters, Podcast, Settings.
 - Queue rows, diagnostics, import controls, TTS engine selection, output history, and startup snapshot exist.
+- Guided Start view, persistent Inspector, Calibre action guidance, TTS engine setup checklist, and queue action guidance exist.
 - `audio.cpp` upstream check shows update status.
 - Local engine diagnostics exist.
 - Settings persist in `.bookcast-workbench.json`.
@@ -116,6 +119,8 @@ Status: Mostly done.
 Status: Partial.
 
 - Left navigation exists.
+- Guided Start view exists.
+- Persistent Inspector with next step, setup checklist, engine setup, guidance, and diagnostics exists.
 - TTS Studio exists.
 - Import Wizard exists.
 - Library view exists.
@@ -124,10 +129,11 @@ Status: Partial.
 - Settings view exists.
 - Header guidance exists.
 - Queue summary exists.
+- Queue action guidance exists.
 - Render sample before full render exists.
 - Native Browse buttons exist for important paths.
 - Startup restores saved library snapshot.
-- Remaining: final visual design, clearer first-run wizard, better step-by-step guidance, stronger error recovery, and less technical engine terminology.
+- Remaining: final visual design, stronger error recovery, and less technical engine terminology.
 
 ## Current Definition Of Done Before Beta
 
@@ -139,4 +145,3 @@ Status: Partial.
 - Missing dependency errors explain exact fix.
 - Interface can be used without copying IDs manually.
 - User can understand next safe action from screen state alone.
-

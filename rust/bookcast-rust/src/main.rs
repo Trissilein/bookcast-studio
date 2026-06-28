@@ -52,6 +52,7 @@ export component AppWindow inherits Window {
     in-out property <string> chapter-edit-title: "";
     in-out property <string> chapter-edit-text: "";
     in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
+    in-out property <string> character-review-text: "Review checklist: run suggestions, delete false positives, assign voices, then tick confirmation.";
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
@@ -673,7 +674,19 @@ export component AppWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
-                            Text { text: "Manual confirmation required before per-character rendering."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            Text { text: "Speaker voice map"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Edit generated names into speaker=voice pairs. Example: Narrator=Microsoft Hedda; Ada=de_DE-thorsten-medium.onnx"; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            LineEdit { text <=> root.speaker-voice-map; }
+                            CheckBox {
+                                text: "I reviewed every character/speaker voice assignment";
+                                checked <=> root.speaker-voices-confirmed;
+                            }
+                            Text {
+                                text: root.character-review-text;
+                                color: rgb(133, 82, 38);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                         }
                     }
 
@@ -3296,6 +3309,38 @@ fn source_probe_summary(value: &Value) -> String {
     }
 }
 
+fn character_voice_template(candidates: Option<&Vec<Value>>) -> String {
+    let Some(candidates) = candidates else {
+        return String::new();
+    };
+    let mut names = Vec::new();
+    for item in candidates {
+        let name = item
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        if !name.is_empty() && !names.iter().any(|existing| existing == name) {
+            names.push(name.to_string());
+        }
+    }
+    names
+        .into_iter()
+        .map(|name| format!("{name}="))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn character_review_text(candidates: Option<&Vec<Value>>) -> String {
+    let count = candidates.map(|items| items.len()).unwrap_or(0);
+    if count == 0 {
+        return "No candidates. Re-run extraction with Ollama running, or manually enter speaker=voice pairs.".to_string();
+    }
+    format!(
+        "Review checklist: {count} candidate(s). Delete false positives, merge duplicate names, assign a voice to each kept speaker, then tick confirmation."
+    )
+}
+
 fn job_progress_detail(value: &Value) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
@@ -4014,6 +4059,7 @@ fn handle_bridge_events(
                 );
             }
             Some("characters") => {
+                let candidates = value.get("candidates").and_then(Value::as_array);
                 let text = value
                     .get("candidates")
                     .and_then(Value::as_array)
@@ -4032,10 +4078,17 @@ fn handle_bridge_events(
                     })
                     .filter(|text| !text.is_empty())
                     .unwrap_or_else(|| "No character candidates returned.".to_string());
+                let voice_template = character_voice_template(candidates);
+                let review_text = character_review_text(candidates);
                 set_character_text(weak.clone(), &text);
+                if !voice_template.is_empty() {
+                    set_speaker_voice_map(weak.clone(), &voice_template);
+                    set_speaker_voices_confirmed(weak.clone(), false);
+                }
+                set_character_review_text(weak.clone(), &review_text);
                 set_guide(
                     weak.clone(),
-                    "Character candidates loaded. Confirm names manually before voice assignment.",
+                    "Character candidates loaded. Review/delete false positives, assign voices, then tick confirmation.",
                 );
             }
             Some("podcast_script") => {
@@ -4256,6 +4309,15 @@ fn set_character_text(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_character_text(text.into());
+        }
+    });
+}
+
+fn set_character_review_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_character_review_text(text.into());
         }
     });
 }
@@ -4494,6 +4556,8 @@ mod tests {
     use super::audio_cpp_update_status;
     use super::calibre_action_text;
     use super::calibre_suggested_path;
+    use super::character_review_text;
+    use super::character_voice_template;
     use super::confirmed_voice_entries_from;
     use super::engine_setup_text_from;
     use super::job_progress_detail;
@@ -4795,6 +4859,22 @@ mod tests {
         assert!(folder.contains("Supported files: 2"));
         assert!(folder.contains("txt | One.txt"));
         assert!(folder.contains("More files exist"));
+    }
+
+    #[test]
+    fn character_candidates_seed_voice_review_template() {
+        let candidates = vec![
+            json!({"name": "Narrator", "role": "narrator", "evidence": "summary"}),
+            json!({"name": "Ada", "role": "character", "evidence": "dialogue"}),
+            json!({"name": "Ada", "role": "character", "evidence": "duplicate"}),
+        ];
+
+        assert_eq!(
+            character_voice_template(Some(&candidates)),
+            "Narrator=; Ada="
+        );
+        assert!(character_review_text(Some(&candidates)).contains("3 candidate(s)"));
+        assert!(character_review_text(None).contains("No candidates"));
     }
 
     #[test]
