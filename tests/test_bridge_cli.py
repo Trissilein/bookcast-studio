@@ -626,6 +626,7 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
             "host=Narrator",
             "--voice",
             "explainer=Narrator",
+            "--confirm-voices",
         ]
     )
     render_events = _events(capsys.readouterr().out)
@@ -657,6 +658,7 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
             "start with a practical question",
             "--voice",
             "host=Narrator",
+            "--confirm-voices",
         ]
     )
     interactive_events = _events(capsys.readouterr().out)
@@ -666,3 +668,42 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     assert any(event.get("event") == "interactive_podcast" for event in interactive_events)
     assert interactive_events[-1]["event"] == "job_done"
     assert interactive_events[-1]["output"].endswith("_interactive.opus")
+
+
+def test_bridge_podcast_render_requires_confirmed_voice_map(tmp_path: Path, capsys, monkeypatch) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Podcast Confirm.txt"
+    source.write_text("A short article about careful engineering.", encoding="utf-8")
+
+    main(["bridge", "import", str(source), "--library", str(library_root)])
+    book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
+
+    class FakeOllama:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def health(self) -> bool:
+            return True
+
+        def generate(self, prompt: str, mode: str = "json") -> str:
+            return (
+                '{"title":"Engineering Cast","summary":"Short.",'
+                '"speakers":["host"],'
+                '"turns":[{"speaker":"host","text":"Welcome."}]}'
+            )
+
+    monkeypatch.setattr("bookcast.bridge.OllamaProvider", FakeOllama)
+
+    result = main(["bridge", "podcast-render", book_id, "--library", str(library_root), "--voice", "host=Narrator"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert events[-1]["event"] == "error"
+    assert "Confirm speaker voices" in events[-1]["message"]
+
+    result = main(["bridge", "podcast-render", book_id, "--library", str(library_root), "--confirm-voices"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert events[-1]["event"] == "error"
+    assert "Speaker voice mapping is required" in events[-1]["message"]

@@ -66,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     podcast_render.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
     podcast_render.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     podcast_render.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    podcast_render.add_argument("--confirm-voices", action="store_true", help="Confirm reviewed speaker=voice mappings")
     podcast_render.add_argument("--rate", type=int, default=0)
     podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     podcast_render.add_argument("--model", default="qwen3:8b")
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     podcast_interactive.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
     podcast_interactive.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     podcast_interactive.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    podcast_interactive.add_argument("--confirm-voices", action="store_true", help="Confirm reviewed speaker=voice mappings")
     podcast_interactive.add_argument("--rate", type=int, default=0)
     podcast_interactive.add_argument("--turns", type=int, default=6)
     podcast_interactive.add_argument("--playback", action=argparse.BooleanOptionalAction, default=True)
@@ -191,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
     bridge_podcast_render.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     bridge_podcast_render.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    bridge_podcast_render.add_argument("--confirm-voices", action="store_true", help="Confirm reviewed speaker=voice mappings")
     bridge_podcast_render.add_argument("--rate", type=int, default=0)
     bridge_podcast_render.add_argument("--ffmpeg", default="ffmpeg")
     bridge_podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
@@ -210,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_interactive.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
     bridge_podcast_interactive.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     bridge_podcast_interactive.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    bridge_podcast_interactive.add_argument("--confirm-voices", action="store_true", help="Confirm reviewed speaker=voice mappings")
     bridge_podcast_interactive.add_argument("--rate", type=int, default=0)
     bridge_podcast_interactive.add_argument("--turns", type=int, default=4)
     bridge_podcast_interactive.add_argument("--seed-prompt", default=None)
@@ -370,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.mode,
                 args.format,
                 args.voice,
+                args.confirm_voices,
                 args.rate,
                 args.ffmpeg,
                 args.ollama_url,
@@ -391,6 +396,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.mode,
                 args.format,
                 args.voice,
+                args.confirm_voices,
                 args.rate,
                 args.turns,
                 args.seed_prompt,
@@ -557,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if args.podcast_command == "render":
                 script = generate_podcast_script(text, provider, mode=args.mode)
-                voice_map = _parse_voice_map(args.voice)
+                voice_map = _confirmed_voice_map(args.voice, args.confirm_voices)
                 output = library.render_podcast_script(
                     args.book_id,
                     script,
@@ -569,7 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Rendered podcast {output}")
                 return 0
             if args.podcast_command == "interactive":
-                voice_map = _parse_voice_map(args.voice)
+                voice_map = _confirmed_voice_map(args.voice, args.confirm_voices)
                 output = _run_interactive_podcast(
                     library=library,
                     book_id=args.book_id,
@@ -603,6 +609,15 @@ def _parse_voice_map(entries: list[str]) -> dict[str, str]:
         if not speaker or not voice:
             raise SystemExit(f"Invalid --voice mapping: {entry!r}; expected speaker=voice")
         mapping[speaker] = voice
+    return mapping
+
+
+def _confirmed_voice_map(entries: list[str], confirmed: bool) -> dict[str, str]:
+    mapping = _parse_voice_map(entries)
+    if not mapping:
+        raise SystemExit("Speaker voice mapping is required before podcast rendering")
+    if not confirmed:
+        raise SystemExit("Confirm speaker voices before rendering: pass --confirm-voices after checking speaker=voice mappings")
     return mapping
 
 

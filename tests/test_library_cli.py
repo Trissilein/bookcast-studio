@@ -254,6 +254,9 @@ def test_cli_interactive_podcast_session(tmp_path: Path, monkeypatch, capsys) ->
             "2",
             "--model",
             "fake",
+            "--voice",
+            "host=Narrator",
+            "--confirm-voices",
         ]
     )
 

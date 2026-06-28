@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 slint::slint! {
-import { Button, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, TextEdit } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     title: "BookCast Studio";
@@ -52,6 +52,7 @@ export component AppWindow inherits Window {
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
+    in-out property <bool> speaker-voices-confirmed: false;
     in-out property <string> interactive-turns: "4";
     in-out property <string> interactive-seed-prompt: "";
     in-out property <int> podcast-mode-index: 0;
@@ -586,6 +587,10 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Speaker voices: speaker=voice, separated by semicolon or comma"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.speaker-voice-map; }
+                            CheckBox {
+                                text: "I reviewed every speaker=voice assignment";
+                                checked <=> root.speaker-voices-confirmed;
+                            }
                             HorizontalLayout {
                                 spacing: 10px;
                                 VerticalLayout {
@@ -1422,6 +1427,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text("Podcast render needs a book id.".into());
             return;
         }
+        if let Err(problem) = confirmed_speaker_voice_entries(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
         let args = podcast_render_args(&app, book_id);
         run_bridge(
             app.as_weak(),
@@ -1445,6 +1455,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             "Interactive turns",
         ) {
             app.set_status_text(problem.into());
+            return;
+        }
+        if let Err(problem) = confirmed_speaker_voice_entries(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
             return;
         }
         let args = podcast_interactive_args(&app, book_id);
@@ -1937,6 +1952,27 @@ fn split_voice_map(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn confirmed_speaker_voice_entries(app: &AppWindow) -> Result<Vec<String>, String> {
+    confirmed_voice_entries_from(
+        &app.get_speaker_voice_map().to_string(),
+        app.get_speaker_voices_confirmed(),
+    )
+}
+
+fn confirmed_voice_entries_from(value: &str, confirmed: bool) -> Result<Vec<String>, String> {
+    let entries = split_voice_map(value);
+    if entries.is_empty() {
+        return Err("Speaker voice mapping is required before podcast rendering.".to_string());
+    }
+    if !confirmed {
+        return Err(
+            "Review every speaker=voice assignment, then tick confirmation before rendering."
+                .to_string(),
+        );
+    }
+    Ok(entries)
+}
+
 fn podcast_mode(index: i32) -> &'static str {
     match index {
         1 => "controversial",
@@ -2167,8 +2203,11 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
         app.get_output_format().to_string(),
     ];
     args.extend(ollama_args(app));
-    for entry in split_voice_map(&app.get_speaker_voice_map().to_string()) {
+    for entry in confirmed_speaker_voice_entries(app).unwrap_or_default() {
         args.extend(["--voice".into(), entry]);
+    }
+    if app.get_speaker_voices_confirmed() {
+        args.push("--confirm-voices".into());
     }
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
@@ -2213,8 +2252,11 @@ fn podcast_interactive_args(app: &AppWindow, book_id: String) -> Vec<String> {
         args.extend(["--seed-prompt".into(), seed]);
     }
     args.extend(ollama_args(app));
-    for entry in split_voice_map(&app.get_speaker_voice_map().to_string()) {
+    for entry in confirmed_speaker_voice_entries(app).unwrap_or_default() {
         args.extend(["--voice".into(), entry]);
+    }
+    if app.get_speaker_voices_confirmed() {
+        args.push("--confirm-voices".into());
     }
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
@@ -3356,6 +3398,19 @@ fn handle_bridge_events(
                             .join(", ")
                     })
                     .unwrap_or_default();
+                let speaker_template = script
+                    .get("speakers")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .filter(|speaker| !speaker.trim().is_empty())
+                            .map(|speaker| format!("{speaker}="))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    })
+                    .unwrap_or_default();
                 let turns = script
                     .get("turns")
                     .and_then(Value::as_array)
@@ -3380,6 +3435,10 @@ fn handle_bridge_events(
                     &format!("{title}\nSpeakers: {speakers}\n\n{summary}\n\n{turns}"),
                 );
                 if let Some(path) = value.get("path").and_then(Value::as_str) {
+                    if !speaker_template.is_empty() {
+                        set_speaker_voice_map(weak.clone(), &speaker_template);
+                        set_speaker_voices_confirmed(weak.clone(), false);
+                    }
                     set_guide(weak.clone(), &format!("Podcast script saved: {path}"));
                 } else if let Some(output) = value.get("output").and_then(Value::as_str) {
                     set_last_output(weak.clone(), output);
@@ -3550,6 +3609,23 @@ fn set_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_speaker_voice_map(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_speaker_voice_map(text.into());
+        }
+    });
+}
+
+fn set_speaker_voices_confirmed(weak: slint::Weak<AppWindow>, confirmed: bool) {
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_speaker_voices_confirmed(confirmed);
+        }
+    });
+}
+
 fn append_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let _ = slint::invoke_from_event_loop(move || {
@@ -3708,6 +3784,7 @@ mod tests {
     use serde_json::json;
 
     use super::audio_cpp_update_status;
+    use super::confirmed_voice_entries_from;
     use super::job_progress_detail;
     use super::optional_positive_limit_problem;
     use super::output_open_target;
@@ -3817,6 +3894,22 @@ mod tests {
                 "9".to_string(),
                 "10".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn confirmed_voice_entries_require_mapping_and_confirmation() {
+        assert_eq!(
+            confirmed_voice_entries_from("", true).unwrap_err(),
+            "Speaker voice mapping is required before podcast rendering."
+        );
+        assert_eq!(
+            confirmed_voice_entries_from("host=Narrator", false).unwrap_err(),
+            "Review every speaker=voice assignment, then tick confirmation before rendering."
+        );
+        assert_eq!(
+            confirmed_voice_entries_from("host=Narrator; explainer=Guest", true).unwrap(),
+            vec!["host=Narrator".to_string(), "explainer=Guest".to_string()]
         );
     }
 

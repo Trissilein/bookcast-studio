@@ -40,7 +40,7 @@
 - Add narrator and speaker tables in UI. Done.
 - Add Ollama-assisted character extraction. CLI and Rust workbench bridge done.
 - Sync speaker to voice mappings for podcast render. Done.
-- Require manual confirmation before rendering character voices.
+- Require manual confirmation before rendering character voices. Done.
 
 ## M5 Static Podcast Generator
 

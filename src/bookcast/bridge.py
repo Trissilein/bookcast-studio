@@ -307,6 +307,7 @@ def podcast_render(
     mode: str = "educational",
     output_format: str = "opus",
     voice_entries: list[str] | None = None,
+    confirm_voices: bool = False,
     rate: int = 0,
     ffmpeg: str = "ffmpeg",
     ollama_url: str = "http://127.0.0.1:11434",
@@ -320,6 +321,7 @@ def podcast_render(
     piper_voice_dir: str | None = None,
     piper_model: str | None = None,
 ) -> int:
+    voice_map = _confirmed_voice_map(voice_entries or [], confirm_voices)
     emit("job_started", job="podcast_render", book_id=book_id, mode=mode, format=output_format, provider=provider)
     text = _book_text(library_root, book_id)
     llm = OllamaProvider(model=model, base_url=ollama_url)
@@ -344,7 +346,7 @@ def podcast_render(
             script,
             output_format=output_format,
             provider=tts_provider,
-            voice_map=_parse_voice_entries(voice_entries or []),
+            voice_map=voice_map,
             ffmpeg=ffmpeg,
             rate=rate,
             progress_callback=lambda payload: emit("job_progress", job="podcast_render", **payload),
@@ -365,6 +367,7 @@ def podcast_interactive(
     mode: str = "educational",
     output_format: str = "opus",
     voice_entries: list[str] | None = None,
+    confirm_voices: bool = False,
     rate: int = 0,
     turns: int = 4,
     seed_prompt: str | None = None,
@@ -400,7 +403,7 @@ def podcast_interactive(
             piper_voice_dir=piper_voice_dir,
             piper_model=piper_model,
         )
-        voice_map = _parse_voice_entries(voice_entries or [])
+        voice_map = _confirmed_voice_map(voice_entries or [], confirm_voices)
         session_dir = library.root / "books" / book_id / "podcasts" / "interactive" / safe_name(str(book["title"]))
         chunk_dir = session_dir / "audio_chunks"
         output_dir = session_dir / "output"
@@ -798,6 +801,15 @@ def _parse_voice_entries(entries: list[str]) -> dict[str, str]:
         if not speaker or not voice:
             raise ValueError(f"Invalid voice mapping: {entry!r}; expected speaker=voice")
         mapping[speaker] = voice
+    return mapping
+
+
+def _confirmed_voice_map(entries: list[str], confirmed: bool) -> dict[str, str]:
+    mapping = _parse_voice_entries(entries)
+    if not mapping:
+        raise ValueError("Speaker voice mapping is required before podcast rendering")
+    if not confirmed:
+        raise ValueError("Confirm speaker voices before rendering: pass --confirm-voices after checking speaker=voice mappings")
     return mapping
 
 

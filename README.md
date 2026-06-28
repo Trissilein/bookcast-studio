@@ -16,6 +16,7 @@ Current slice:
 - ffmpeg assembly to Opus, MP3, WAV, or M4B.
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
 - Interactive podcast sessions with resident Ollama, follow-up prompts, and rendered output.
+- Confirmed speaker-to-voice mapping before podcast or character-style multi-voice rendering.
 - Text cleanup and stable chunk hashes.
 - Editable cleanup profiles and chapter review/editing in the Python UI and Rust Library view.
 - Character and podcast workbench views in the Rust UI.
@@ -54,6 +55,8 @@ show where long audiobook or podcast renders currently are.
 The header shows the next safe action from current book, engine-check, output,
 and queue state; the queue footer highlights the active or failed job before the
 raw job log.
+Podcast render requires explicit `speaker=voice` entries plus confirmation after
+manual review; the Rust checkbox is intentionally not persisted.
 Imports emit the first book preview automatically and the Rust workbench switches
 back to TTS Studio, reducing manual book-id copy/paste after file or Calibre import.
 `Refresh Books` in the Rust workbench also asks the bridge for a first-book
@@ -128,8 +131,8 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge update-chapter <book-id> --library .\library --chapter-index 0 --title "Fixed Chapter" --text "Corrected text."
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
-.\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator
-.\.venv\Scripts\bookcast bridge podcast-interactive <book-id> --library .\library --mode interview --turns 4 --seed-prompt "Start with the core question"
+.\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator --voice position_a=Guest --confirm-voices
+.\.venv\Scripts\bookcast bridge podcast-interactive <book-id> --library .\library --mode interview --turns 4 --seed-prompt "Start with the core question" --voice host=Narrator --confirm-voices
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library --provider piper --voice D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices\de_DE-thorsten-medium.onnx
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>
@@ -186,8 +189,8 @@ These commands require a running Ollama server.
 ```powershell
 .\.venv\Scripts\bookcast characters suggest <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast podcast script <book-id> --library .\library --mode educational --model qwen3:8b
-.\.venv\Scripts\bookcast podcast render <book-id> --library .\library --mode controversial --format opus --voice host=Narrator --voice explainer=Guest
-.\.venv\Scripts\bookcast podcast interactive <book-id> --library .\library --mode interview --turns 4 --no-playback
+.\.venv\Scripts\bookcast podcast render <book-id> --library .\library --mode controversial --format opus --voice host=Narrator --voice explainer=Guest --confirm-voices
+.\.venv\Scripts\bookcast podcast interactive <book-id> --library .\library --mode interview --turns 4 --voice host=Narrator --confirm-voices --no-playback
 ```
 
 Podcast modes: `educational`, `controversial`, `interview`.
