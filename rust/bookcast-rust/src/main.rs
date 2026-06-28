@@ -2583,18 +2583,9 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
                 jobs.iter()
                     .rev()
                     .take(8)
-                    .map(|job| {
-                        format!(
-                            "#{:05} | {:>7} | {:>3}% | {:<12} | {}",
-                            job.id % 100000,
-                            job.status,
-                            job.progress,
-                            job.label,
-                            job.detail
-                        )
-                    })
+                    .map(job_queue_line)
                     .collect::<Vec<_>>()
-                    .join("\n"),
+                    .join("\n\n"),
             )
         }
     };
@@ -2628,6 +2619,35 @@ fn queue_summary(jobs: &[JobState]) -> String {
         return format!("Last done: {} - {}", job.label, job.detail);
     }
     "No active jobs. Queue idle.".to_string()
+}
+
+fn progress_bar(progress: u8) -> String {
+    let progress = progress.min(100);
+    let filled = (progress as usize + 5) / 10;
+    format!("[{}{}]", "#".repeat(filled), "-".repeat(10 - filled))
+}
+
+fn job_status_label(status: &str) -> &str {
+    match status {
+        "queued" => "Queued",
+        "running" => "Running",
+        "done" => "Done",
+        "failed" => "Failed",
+        "cancelled" => "Cancelled",
+        _ => "Status",
+    }
+}
+
+fn job_queue_line(job: &JobState) -> String {
+    format!(
+        "{} {:>3}%  {}  {}\n  id #{:05}  {}",
+        progress_bar(job.progress),
+        job.progress.min(100),
+        job_status_label(&job.status),
+        job.label,
+        job.id % 100000,
+        job.detail
+    )
 }
 
 fn workbench_readiness(
@@ -3647,9 +3667,9 @@ fn push_log(weak: slint::Weak<AppWindow>, line: &str) {
         if let Some(app) = weak.upgrade() {
             let current = app.get_queue_text().to_string();
             let next = if current == "Queue idle." {
-                format!("status   |         |     | system       | {line}")
+                format!("System\n  {line}")
             } else {
-                format!("{current}\nstatus   |         |     | system       | {line}")
+                format!("{current}\n\nSystem\n  {line}")
             };
             app.set_queue_text(next.into());
         }
@@ -3980,10 +4000,12 @@ mod tests {
     use super::calibre_suggested_path;
     use super::confirmed_voice_entries_from;
     use super::job_progress_detail;
+    use super::job_queue_line;
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::parse_chapter_index;
     use super::preferred_audio_cpp_family;
+    use super::progress_bar;
     use super::queue_summary;
     use super::render_preflight_problem_from;
     use super::source_probe_summary;
@@ -4250,6 +4272,24 @@ mod tests {
         assert_eq!(
             queue_summary(&failed),
             "Attention: calibre scan failed - metadata.db missing"
+        );
+    }
+
+    #[test]
+    fn job_queue_line_is_readable_progress_card() {
+        let job = JobState {
+            id: 123456,
+            label: "render".to_string(),
+            status: "running".to_string(),
+            progress: 42,
+            detail: "tts 2/5 rendered".to_string(),
+        };
+
+        assert_eq!(progress_bar(42), "[####------]");
+        assert_eq!(progress_bar(100), "[##########]");
+        assert_eq!(
+            job_queue_line(&job),
+            "[####------]  42%  Running  render\n  id #23456  tts 2/5 rendered"
         );
     }
 
