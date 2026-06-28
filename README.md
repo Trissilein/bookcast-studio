@@ -102,6 +102,7 @@ Packaged Windows build:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\readiness_check.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui_launch_smoke.ps1
 .\dist\bookcast-studio-windows\bookcast-studio.exe
@@ -120,6 +121,8 @@ The UI launch smoke starts the packaged desktop app briefly and fails if it exit
 early.
 `readiness_check.ps1` runs the full build, acceptance smoke, UI launch smoke, and
 prints the packaged executable path for manual testing.
+`start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
+workbench at that book, and launches the desktop app for hands-on testing.
 
 ## Import From CLI
 
