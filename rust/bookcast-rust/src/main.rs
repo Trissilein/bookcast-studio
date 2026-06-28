@@ -1421,17 +1421,7 @@ fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
             Ok(output) if output.status.success() => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let remote = stdout.split_whitespace().next().unwrap_or("").trim();
-                let status = if remote.is_empty() {
-                    "audio.cpp: remote returned no HEAD".to_string()
-                } else if remote == pinned {
-                    format!("audio.cpp: pinned {} is current", short_hash(pinned))
-                } else {
-                    format!(
-                        "audio.cpp: Update Available, pinned {} remote {}",
-                        short_hash(pinned),
-                        short_hash(remote)
-                    )
-                };
+                let status = audio_cpp_update_status(pinned, remote);
                 set_audio_status(weak.clone(), &status);
                 push_log(weak.clone(), &status);
                 set_status(weak, "audio.cpp check completed.");
@@ -1457,6 +1447,20 @@ fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
             }
         }
     });
+}
+
+fn audio_cpp_update_status(pinned: &str, remote: &str) -> String {
+    if remote.is_empty() {
+        "audio.cpp: remote returned no HEAD".to_string()
+    } else if remote == pinned {
+        format!("audio.cpp: pinned {} is current", short_hash(pinned))
+    } else {
+        format!(
+            "audio.cpp: Update Available, pinned {} remote {}",
+            short_hash(pinned),
+            short_hash(remote)
+        )
+    }
 }
 
 fn cancel_active_job(weak: slint::Weak<AppWindow>, active_pid: Arc<Mutex<Option<u32>>>) {
@@ -3107,6 +3111,7 @@ mod tests {
 
     use serde_json::json;
 
+    use super::audio_cpp_update_status;
     use super::job_progress_detail;
     use super::optional_positive_limit_problem;
     use super::output_open_target;
@@ -3197,6 +3202,25 @@ mod tests {
                 "9".to_string(),
                 "10".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn audio_cpp_update_status_flags_remote_drift() {
+        let pinned = "aaaaaaaaaaaabbbbbbbbbbbbccccccccccccdddddddd";
+        let remote = "11111111111122222222222233333333333344444444";
+
+        assert_eq!(
+            audio_cpp_update_status(pinned, ""),
+            "audio.cpp: remote returned no HEAD"
+        );
+        assert_eq!(
+            audio_cpp_update_status(pinned, pinned),
+            "audio.cpp: pinned aaaaaaaaaaaa is current"
+        );
+        assert_eq!(
+            audio_cpp_update_status(pinned, remote),
+            "audio.cpp: Update Available, pinned aaaaaaaaaaaa remote 111111111111"
         );
     }
 
