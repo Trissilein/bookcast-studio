@@ -245,6 +245,13 @@ export component AppWindow inherits Window {
                                 VerticalLayout {
                                     Text { text: "Output"; color: rgb(89, 99, 93); }
                                     LineEdit { text <=> root.output-format; }
+                                    HorizontalLayout {
+                                        spacing: 4px;
+                                        Button { text: "Opus"; clicked => { root.output-format = "opus"; } }
+                                        Button { text: "MP3"; clicked => { root.output-format = "mp3"; } }
+                                        Button { text: "M4B"; clicked => { root.output-format = "m4b"; } }
+                                        Button { text: "WAV"; clicked => { root.output-format = "wav"; } }
+                                    }
                                 }
                                 VerticalLayout {
                                     Text { text: "Voice"; color: rgb(89, 99, 93); }
@@ -306,6 +313,7 @@ export component AppWindow inherits Window {
                                 VerticalLayout {
                                     Text { text: "Backend"; color: rgb(89, 99, 93); }
                                     LineEdit { text <=> root.audio-cpp-backend; }
+                                    Button { text: "Use CPU"; clicked => { root.audio-cpp-backend = "cpu"; } }
                                 }
                                 VerticalLayout {
                                     Text { text: "Family"; color: rgb(89, 99, 93); }
@@ -677,6 +685,13 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Default output format"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.output-format; }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                Button { text: "Opus"; clicked => { root.output-format = "opus"; } }
+                                Button { text: "MP3"; clicked => { root.output-format = "mp3"; } }
+                                Button { text: "M4B"; clicked => { root.output-format = "m4b"; } }
+                                Button { text: "WAV"; clicked => { root.output-format = "wav"; } }
+                            }
                             Text { text: "Full render chunk limit (empty = all)"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.render-limit; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
@@ -707,6 +722,7 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "audio.cpp backend"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-backend; }
+                            Button { text: "Use CPU backend"; clicked => { root.audio-cpp-backend = "cpu"; } }
                             Text { text: "audio.cpp family"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-family; }
                             Text {
