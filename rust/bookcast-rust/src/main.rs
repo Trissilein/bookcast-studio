@@ -2067,8 +2067,10 @@ fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
         &app.get_output_format().to_string(),
         app.get_engine_index(),
         &app.get_piper_exe().to_string(),
+        &app.get_voice_name().to_string(),
         &app.get_audio_cpp_exe().to_string(),
         &app.get_audio_cpp_model().to_string(),
+        &app.get_audio_cpp_backend().to_string(),
         &app.get_audio_cpp_family().to_string(),
     )
 }
@@ -2077,8 +2079,10 @@ fn engine_check_problem(app: &AppWindow) -> Option<String> {
     engine_check_problem_from(
         app.get_engine_index(),
         &app.get_piper_exe().to_string(),
+        &app.get_voice_name().to_string(),
         &app.get_audio_cpp_exe().to_string(),
         &app.get_audio_cpp_model().to_string(),
+        &app.get_audio_cpp_backend().to_string(),
         &app.get_audio_cpp_family().to_string(),
     )
 }
@@ -2088,8 +2092,10 @@ fn tts_test_preflight_problem(app: &AppWindow) -> Option<String> {
         &app.get_tts_test_text().to_string(),
         app.get_engine_index(),
         &app.get_piper_exe().to_string(),
+        &app.get_voice_name().to_string(),
         &app.get_audio_cpp_exe().to_string(),
         &app.get_audio_cpp_model().to_string(),
+        &app.get_audio_cpp_backend().to_string(),
         &app.get_audio_cpp_family().to_string(),
     )
 }
@@ -2120,22 +2126,41 @@ fn parse_chapter_index(value: &str) -> Result<u32, String> {
 fn engine_check_problem_from(
     engine_index: i32,
     piper_exe: &str,
+    piper_voice: &str,
     audio_cpp_exe: &str,
     audio_cpp_model: &str,
+    audio_cpp_backend: &str,
     audio_cpp_family: &str,
 ) -> Option<String> {
-    if engine_index == 1 && piper_exe.trim().is_empty() {
-        return Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.".to_string());
+    if engine_index == 1 {
+        if piper_exe.trim().is_empty() {
+            return Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.".to_string());
+        }
+        if let Some(problem) = path_like_file_problem("Piper executable", piper_exe) {
+            return Some(problem);
+        }
+        if let Some(problem) = path_like_file_problem("Piper voice/model", piper_voice) {
+            return Some(problem);
+        }
     }
     if engine_index == 2 {
         if audio_cpp_exe.trim().is_empty() {
             return Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.".to_string());
+        }
+        if let Some(problem) = path_like_file_problem("audio.cpp executable", audio_cpp_exe) {
+            return Some(problem);
         }
         if audio_cpp_model.trim().is_empty() {
             return Some(
                 "audio.cpp selected, but model is missing. Set audio.cpp model before rendering."
                     .to_string(),
             );
+        }
+        if let Some(problem) = path_like_file_problem("audio.cpp model", audio_cpp_model) {
+            return Some(problem);
+        }
+        if audio_cpp_backend.trim().is_empty() {
+            return Some("audio.cpp selected, but backend is empty. Use cpu unless you know another backend is available.".to_string());
         }
         if audio_cpp_family.trim().is_empty() {
             return Some(
@@ -2147,12 +2172,33 @@ fn engine_check_problem_from(
     None
 }
 
+fn path_like_file_problem(label: &str, value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || !looks_like_path(value) || Path::new(value).exists() {
+        return None;
+    }
+    Some(format!("{label} path not found: {value}"))
+}
+
+fn looks_like_path(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    value.contains('\\')
+        || value.contains('/')
+        || value.contains(':')
+        || lower.ends_with(".exe")
+        || lower.ends_with(".onnx")
+        || lower.ends_with(".gguf")
+        || lower.ends_with(".bin")
+}
+
 fn tts_test_preflight_problem_from(
     text: &str,
     engine_index: i32,
     piper_exe: &str,
+    piper_voice: &str,
     audio_cpp_exe: &str,
     audio_cpp_model: &str,
+    audio_cpp_backend: &str,
     audio_cpp_family: &str,
 ) -> Option<String> {
     if text.trim().is_empty() {
@@ -2161,8 +2207,10 @@ fn tts_test_preflight_problem_from(
     engine_check_problem_from(
         engine_index,
         piper_exe,
+        piper_voice,
         audio_cpp_exe,
         audio_cpp_model,
+        audio_cpp_backend,
         audio_cpp_family,
     )
 }
@@ -2172,8 +2220,10 @@ fn render_preflight_problem_from(
     output_format: &str,
     engine_index: i32,
     piper_exe: &str,
+    piper_voice: &str,
     audio_cpp_exe: &str,
     audio_cpp_model: &str,
+    audio_cpp_backend: &str,
     audio_cpp_family: &str,
 ) -> Option<String> {
     if book_id.trim().is_empty() {
@@ -2188,8 +2238,10 @@ fn render_preflight_problem_from(
     if let Some(problem) = engine_check_problem_from(
         engine_index,
         piper_exe,
+        piper_voice,
         audio_cpp_exe,
         audio_cpp_model,
+        audio_cpp_backend,
         audio_cpp_family,
     ) {
         return Some(problem);
@@ -4017,7 +4069,7 @@ mod tests {
     #[test]
     fn render_preflight_requires_book_id() {
         assert_eq!(
-            render_preflight_problem_from("", "opus", 0, "", "", "", "").as_deref(),
+            render_preflight_problem_from("", "opus", 0, "", "", "", "", "", "").as_deref(),
             Some("Render needs a book id. Import a book or click Refresh Books.")
         );
     }
@@ -4025,7 +4077,7 @@ mod tests {
     #[test]
     fn render_preflight_rejects_unknown_output_format() {
         assert_eq!(
-            render_preflight_problem_from("book-1", "flac", 0, "", "", "", "").as_deref(),
+            render_preflight_problem_from("book-1", "flac", 0, "", "", "", "", "", "").as_deref(),
             Some("Output must be opus, mp3, wav, or m4b.")
         );
     }
@@ -4033,8 +4085,18 @@ mod tests {
     #[test]
     fn render_preflight_requires_audio_cpp_model() {
         assert_eq!(
-            render_preflight_problem_from("book-1", "opus", 2, "", "audiocpp_cli.exe", "", "")
-                .as_deref(),
+            render_preflight_problem_from(
+                "book-1",
+                "opus",
+                2,
+                "",
+                "",
+                "audiocpp_cli",
+                "",
+                "cpu",
+                ""
+            )
+            .as_deref(),
             Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
         );
     }
@@ -4042,23 +4104,24 @@ mod tests {
     #[test]
     fn tts_test_preflight_reuses_engine_checks() {
         assert_eq!(
-            tts_test_preflight_problem_from("", 0, "", "", "", "").as_deref(),
+            tts_test_preflight_problem_from("", 0, "", "", "", "", "", "").as_deref(),
             Some("TTS test needs text.")
         );
         assert_eq!(
-            tts_test_preflight_problem_from("hello", 1, "", "", "", "").as_deref(),
+            tts_test_preflight_problem_from("hello", 1, "", "", "", "", "", "").as_deref(),
             Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.")
         );
         assert_eq!(
-            tts_test_preflight_problem_from("hello", 2, "", "", "model.bin", "").as_deref(),
+            tts_test_preflight_problem_from("hello", 2, "", "", "", "model", "cpu", "").as_deref(),
             Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.")
         );
         assert_eq!(
-            tts_test_preflight_problem_from("hello", 2, "", "audiocpp_cli.exe", "", "").as_deref(),
+            tts_test_preflight_problem_from("hello", 2, "", "", "audiocpp_cli", "", "cpu", "")
+                .as_deref(),
             Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
         );
         assert_eq!(
-            tts_test_preflight_problem_from("hello", 2, "", "audiocpp_cli.exe", "model.bin", ""),
+            tts_test_preflight_problem_from("hello", 2, "", "", "audiocpp_cli", "model", "cpu", ""),
             Some(
                 "audio.cpp selected, but family is missing. Set audio.cpp family, e.g. pocket_tts or qwen3_tts."
                     .to_string()
@@ -4069,11 +4132,62 @@ mod tests {
                 "hello",
                 2,
                 "",
-                "audiocpp_cli.exe",
-                "model.bin",
+                "",
+                "audiocpp_cli",
+                "model",
+                "cpu",
                 "pocket_tts"
             ),
             None
+        );
+    }
+
+    #[test]
+    fn render_preflight_rejects_missing_path_like_engine_files() {
+        assert_eq!(
+            render_preflight_problem_from(
+                "book-1",
+                "opus",
+                2,
+                "",
+                "",
+                "D:\\missing\\audiocpp_cli.exe",
+                "model",
+                "cpu",
+                "pocket_tts"
+            )
+            .as_deref(),
+            Some("audio.cpp executable path not found: D:\\missing\\audiocpp_cli.exe")
+        );
+        assert_eq!(
+            render_preflight_problem_from(
+                "book-1",
+                "opus",
+                2,
+                "",
+                "",
+                "audiocpp_cli",
+                "D:\\missing\\model.gguf",
+                "cpu",
+                "pocket_tts"
+            )
+            .as_deref(),
+            Some("audio.cpp model path not found: D:\\missing\\model.gguf")
+        );
+        assert_eq!(
+            render_preflight_problem_from(
+                "book-1",
+                "opus",
+                2,
+                "",
+                "",
+                "audiocpp_cli",
+                "model",
+                "",
+                "pocket_tts"
+            )
+            .as_deref(),
+            Some("audio.cpp selected, but backend is empty. Use cpu unless you know another backend is available.")
         );
     }
 
@@ -4226,7 +4340,7 @@ mod tests {
     #[test]
     fn render_preflight_accepts_configured_piper() {
         assert_eq!(
-            render_preflight_problem_from("book-1", "m4b", 1, "piper.exe", "", "", ""),
+            render_preflight_problem_from("book-1", "m4b", 1, "piper", "", "", "", "", ""),
             None
         );
     }
