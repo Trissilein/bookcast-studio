@@ -355,6 +355,54 @@ def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypat
     assert output_events[0]["outputs"][0]["path"] == sample_events[-1]["output"]
 
 
+def test_bridge_startup_snapshot_emits_books_selected_preview_and_outputs(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    library_root = tmp_path / "library"
+    first_source = tmp_path / "Ada Author - First Book.txt"
+    second_source = tmp_path / "Ada Author - Second Book.txt"
+    first_source.write_text("First book text.", encoding="utf-8")
+    second_source.write_text("Second book text.", encoding="utf-8")
+
+    main(["bridge", "import", str(first_source), "--library", str(library_root)])
+    _events(capsys.readouterr().out)
+    main(["bridge", "import", str(second_source), "--library", str(library_root)])
+    import_events = _events(capsys.readouterr().out)
+    second_id = str(next(event["book_id"] for event in import_events if event.get("event") == "job_done"))
+
+    class FakeProvider(TtsProvider):
+        id = "fake"
+
+        def health(self) -> bool:
+            return True
+
+        def list_voices(self):
+            return []
+
+        def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
+            output_wav.parent.mkdir(parents=True, exist_ok=True)
+            output_wav.write_bytes(b"RIFFfakeWAVE")
+
+    def fake_assemble(chunk_wavs, output_path, output_format, ffmpeg="ffmpeg", chapters=None):
+        output_path.write_bytes(b"audio")
+        return output_path
+
+    monkeypatch.setattr("bookcast.bridge.WindowsSapiProvider", FakeProvider)
+    monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    main(["bridge", "sample-render", second_id, "--library", str(library_root)])
+    _events(capsys.readouterr().out)
+
+    result = main(["bridge", "startup-snapshot", "--library", str(library_root), "--book-id", second_id])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in events] == ["books", "book_preview", "outputs"]
+    assert len(events[0]["books"]) == 2
+    assert events[1]["book"]["id"] == second_id
+    assert events[1]["book"]["title"] == "Second Book"
+    assert events[2]["outputs"]
+
+
 def test_bridge_voices_emit_provider_voices(capsys, monkeypatch) -> None:
     class FakeProvider(TtsProvider):
         id = "fake"

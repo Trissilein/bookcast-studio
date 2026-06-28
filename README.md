@@ -123,8 +123,8 @@ early.
 prints the packaged executable path for manual testing.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
 workbench at that book, and launches the desktop app for hands-on testing.
-When a saved book id exists, the Rust workbench auto-loads that book preview on
-startup.
+On startup, the Rust workbench auto-loads the saved library snapshot: book list,
+selected book preview, and outputs.
 
 ## Import From CLI
 
@@ -134,6 +134,7 @@ startup.
 .\.venv\Scripts\bookcast render <book-id> --library .\library --format opus
 .\.venv\Scripts\bookcast render <book-id> --library .\library --format m4b
 .\.venv\Scripts\bookcast bridge diagnose --library .\library
+.\.venv\Scripts\bookcast bridge startup-snapshot --library .\library --book-id <book-id>
 .\.venv\Scripts\bookcast bridge voices
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
 .\.venv\Scripts\bookcast bridge tts-test --library .\library --text "Engine smoke test."

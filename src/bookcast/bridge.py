@@ -184,6 +184,22 @@ def list_books(library_root: Path, preview_first: bool = False) -> int:
     return 0
 
 
+def startup_snapshot(library_root: Path, book_id: str | None = None) -> int:
+    library = BookLibrary(library_root)
+    try:
+        books = library.list_books()
+        emit("books", books=books)
+        selected = book_id if book_id and library.get_book(book_id) else None
+        if not selected and books:
+            selected = str(books[0]["id"])
+        if selected:
+            emit("book_preview", **_book_preview_payload(library, selected))
+            emit("outputs", outputs=library.list_outputs(selected))
+    finally:
+        library.close()
+    return 0
+
+
 def outputs(library_root: Path, book_id: str | None = None) -> int:
     library = BookLibrary(library_root)
     try:

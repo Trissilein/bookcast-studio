@@ -145,6 +145,10 @@ def main(argv: list[str] | None = None) -> int:
     bridge_list.add_argument("--library", type=Path, required=True)
     bridge_list.add_argument("--preview-first", action="store_true")
 
+    bridge_startup = bridge_sub.add_parser("startup-snapshot", help="Emit books, selected preview, and outputs")
+    bridge_startup.add_argument("--library", type=Path, required=True)
+    bridge_startup.add_argument("--book-id", default=None)
+
     bridge_outputs = bridge_sub.add_parser("outputs", help="Emit rendered outputs as JSONL")
     bridge_outputs.add_argument("--library", type=Path, required=True)
     bridge_outputs.add_argument("--book-id", default=None)
@@ -331,6 +335,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.bridge_command == "list":
             return bridge.run_safely(bridge.list_books, args.library, args.preview_first)
+        if args.bridge_command == "startup-snapshot":
+            return bridge.run_safely(bridge.startup_snapshot, args.library, args.book_id)
         if args.bridge_command == "outputs":
             return bridge.run_safely(bridge.outputs, args.library, args.book_id)
         if args.bridge_command == "cleanup-profiles":

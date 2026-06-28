@@ -857,23 +857,23 @@ fn main() -> Result<(), slint::PlatformError> {
     refresh_readiness(app.as_weak());
 
     wire_callbacks(&app, state.clone());
-    schedule_startup_preview(app.as_weak(), state);
+    schedule_startup_snapshot(app.as_weak(), state);
     app.run()
 }
 
-fn schedule_startup_preview(weak: slint::Weak<AppWindow>, state: AppState) {
+fn schedule_startup_snapshot(weak: slint::Weak<AppWindow>, state: AppState) {
     slint::Timer::single_shot(Duration::from_millis(300), move || {
         let Some(app) = weak.upgrade() else { return };
-        let book_id = app.get_book_id().to_string();
-        if book_id.trim().is_empty() {
+        let library = app.get_library_path().to_string();
+        if library.trim().is_empty() {
             return;
         }
-        app.set_status_text("Loading saved book preview...".into());
+        app.set_status_text("Loading saved library snapshot...".into());
         run_bridge(
             app.as_weak(),
             state,
-            "startup preview",
-            preview_args(&app, book_id),
+            "startup snapshot",
+            startup_snapshot_args(&app),
         );
     });
 }
@@ -2553,6 +2553,20 @@ fn preview_args(app: &AppWindow, book_id: String) -> Vec<String> {
         "--library".into(),
         app.get_library_path().to_string(),
     ]
+}
+
+fn startup_snapshot_args(app: &AppWindow) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        "startup-snapshot".into(),
+        "--library".into(),
+        app.get_library_path().to_string(),
+    ];
+    let book_id = app.get_book_id().to_string();
+    if !book_id.trim().is_empty() {
+        args.extend(["--book-id".into(), book_id]);
+    }
+    args
 }
 
 fn select_book_id(
