@@ -1,73 +1,142 @@
 # BookCast Studio Milestones
 
+Status legend:
+
+- Done: implemented and covered by smoke/unit checks.
+- Mostly done: usable, but needs real-world hardening.
+- Partial: core exists, UX or workflow still incomplete.
+- Open: not production-usable yet.
+
+## Product Readiness
+
+- Current state: Alpha / manual-test ready.
+- Interface state: not final.
+- Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
+- Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
+
 ## M0 Repo Bootstrap
 
-- Python package, CLI entrypoint, PySide UI entrypoint.
-- SQLite migration harness.
-- Tests and README.
+Status: Done.
+
+- Python package, CLI entrypoint, and legacy PySide UI entrypoint exist.
+- SQLite migration harness exists.
+- Rust workspace and Slint client exist.
+- README, setup notes, smoke scripts, and tests exist.
 
 ## M1 Library + Import
 
-- Import TXT, MD, EPUB.
-- Store source copies in library root.
-- Persist books, sources, chapters, chunks.
-- Show imported books in desktop library table.
+Status: Mostly done.
+
+- TXT, MD, EPUB, DOCX, and PDF import exist.
+- Source copies are stored in the BookCast library root.
+- Books, sources, chapters, chunks, outputs, jobs, voices, speakers, and podcast data are persisted.
+- Rust Library view can show books, previews, chapters, outputs, and selected book state.
+- Remaining: real-world import quality pass with large EPUBs, messy PDFs, and duplicate edge cases.
 
 ## M1.5 Calibre Import
 
-- Read Calibre libraries through `calibredb`.
-- Scan books with `EPUB`, `TXT`, or `MD` formats.
-- Import selected books into BookCast without writing back to Calibre.
-- Store Calibre ID/UUID for duplicate-safe re-import.
+Status: Mostly done.
+
+- Calibre import is read-only through `calibredb`.
+- Calibre scan/import supports bounded batches.
+- Calibre ID based import exists.
+- Diagnostics explain wrong folder, missing `metadata.db`, missing `calibredb`, and unreadable/locked library cases.
+- Wizard can suggest nested/parent library folders and source-folder fallback.
+- Remaining: validate against the user's real Calibre library and improve copy around failure cases.
 
 ## M2 Text Pipeline
 
-- Add PDF and DOCX extraction. Done.
-- Add editable cleanup profiles. Done.
-- Add chapter and chunk review UI. Done.
+Status: Mostly done.
+
+- TXT, MD, EPUB, DOCX, and PDF extraction exist.
+- Cleanup profiles exist.
+- Chapter and chunk review exist.
+- Stable chunk hashes exist.
+- Chapter title/text editing and rechunking exist in the Rust Library view.
+- Remaining: golden sample tests for German/English EPUBs and messy PDFs; better chapter detection heuristics for problematic books.
 
 ## M3 Audiobook Render
 
-- Add TTS provider interface implementation. Windows SAPI baseline done.
-- Add locally validated Piper provider using existing Trispr-Flow Piper binary/voices. Done.
-- Render resumable chunks. Done.
-- Include provider, voice, and rate in render cache keys so engine changes do not reuse stale WAVs. Done.
-- Assemble Opus, MP3, WAV, and M4B with ffmpeg. Done.
-- Add chaptered export. Done.
+Status: Mostly done.
+
+- TTS provider interface exists.
+- Windows SAPI fallback exists.
+- Piper provider using local Trispr-Flow binaries/voices exists.
+- Configurable `audio.cpp` external-process provider exists.
+- Render cache keys include provider, voice, rate, and engine options.
+- Resumable chunk rendering exists.
+- ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
+- Chaptered export exists.
+- Queue progress, cancel, retry, and output refresh exist.
+- Remaining: validate real `audio.cpp` model/family combinations end-to-end; improve voice/model selection UX; stress-test full-book renders.
 
 ## M4 Voices + Characters
 
-- Add narrator and speaker tables in UI. Done.
-- Add Ollama-assisted character extraction. CLI and Rust workbench bridge done.
-- Sync speaker to voice mappings for podcast render. Done.
-- Require manual confirmation before rendering character voices. Done.
+Status: Partial.
+
+- Narrator/speaker data model exists.
+- Ollama-assisted character suggestions exist.
+- Speaker-to-voice mappings exist.
+- Manual confirmation before multi-speaker render exists.
+- Remaining: proper character review UX, per-character audiobook casting flow, and better confidence/excerpt display.
 
 ## M5 Static Podcast Generator
 
-- Generate educational, controversial, and interview scripts from sources. CLI and Rust workbench bridge done.
-- Render multi-speaker episodes. Done.
-- Expose static podcast script/render actions in Rust workbench. Done.
+Status: Partial / usable prototype.
+
+- Educational, controversial, and interview modes exist.
+- Script generation through Ollama bridge exists.
+- Multi-speaker podcast render exists.
+- Rust views expose static podcast generation and render.
+- Remaining: script editor/review flow, better source citation display, better prompt controls, and real smoke tests with user-selected models.
 
 ## M6 Interactive Podcast
 
-- Keep local LLM resident. Done.
-- Support user interruptions and generated follow-up segments. Done.
-- Stream partial render/playback. Done.
+Status: Prototype, not final.
+
+- Interactive command path exists.
+- Follow-up prompts and rendered output path exist.
+- Remaining: true live conversation UX, interruption while playback/rendering runs, partial audio streaming, cancellation, session memory, and resident Ollama lifecycle management.
 
 ## M7 Rust Workbench Migration
 
-- Add Rust workspace and Slint workbench MVP. Done.
-- Keep Python backend as JSONL bridge during migration. Done.
-- Add queue log, cancel hook, diagnostics, import controls, TTS engine selection. Done.
-- Add configurable `audio.cpp` external-process TTS provider. Done.
-- Add `audio.cpp` upstream check with `Update Available` flag. Done.
-- Add local `audio.cpp` executable/model health diagnostics. Done.
-- Replace queue log with structured job rows. Done.
-- Add Calibre scan preview and ID-based import in Rust workbench. Done.
-- Add source/chapter preview panes and render sample before full queue. Done.
-- Add voice discovery/selection and output-open actions. Done.
-- Persist Rust UI settings and add structured views instead of one-page workbench. Done.
-- Add Rust views for character suggestions and static podcast generation. Done.
-- Add a real build/package command and a final end-to-end acceptance script. Done.
-- Reduce early UX friction: auto-select first listed book and prefer Piper after diagnostics when no voice/engine was chosen. Done.
-- Next: install or build a real `audio.cpp` binary/model, validate exact CLI arguments, and polish visual design.
+Status: Mostly done.
+
+- Rust Slint client is the primary UI.
+- Python backend remains as JSONL bridge.
+- Structured views exist: TTS Studio, Import, Library, Characters, Podcast, Settings.
+- Queue rows, diagnostics, import controls, TTS engine selection, output history, and startup snapshot exist.
+- `audio.cpp` upstream check shows update status.
+- Local engine diagnostics exist.
+- Settings persist in `.bookcast-workbench.json`.
+- Remaining: visual polish, smoother onboarding, better empty states, better grouped settings, and MediaEncoder-grade queue clarity.
+
+## Interface / UX Checklist
+
+Status: Partial.
+
+- Left navigation exists.
+- TTS Studio exists.
+- Import Wizard exists.
+- Library view exists.
+- Character view exists.
+- Podcast view exists.
+- Settings view exists.
+- Header guidance exists.
+- Queue summary exists.
+- Render sample before full render exists.
+- Native Browse buttons exist for important paths.
+- Startup restores saved library snapshot.
+- Remaining: final visual design, clearer first-run wizard, better step-by-step guidance, stronger error recovery, and less technical engine terminology.
+
+## Current Definition Of Done Before Beta
+
+- One real Calibre library imports predictably.
+- One German EPUB renders full Opus and M4B with usable chapter structure.
+- One real `audio.cpp` setup renders a sample and a short chapter.
+- Queue remains readable during long render.
+- Cancel/retry works during long render.
+- Missing dependency errors explain exact fix.
+- Interface can be used without copying IDs manually.
+- User can understand next safe action from screen state alone.
+
