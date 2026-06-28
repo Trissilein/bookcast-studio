@@ -121,7 +121,7 @@ class AudioCppProvider(TtsProvider):
     def health(self) -> bool:
         try:
             proc = subprocess.run(
-                [self.executable, "--help"],
+                [self.executable, "--help", "--task", "tts"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -136,12 +136,16 @@ class AudioCppProvider(TtsProvider):
     def synthesize(self, text: str, output_wav: Path, voice: str | None = None, rate: int = 0) -> None:
         if not self.model:
             raise RuntimeError("audio.cpp model path/name is required")
+        if not self.family:
+            raise RuntimeError("audio.cpp family is required")
         output_wav = Path(output_wav)
         output_wav.parent.mkdir(parents=True, exist_ok=True)
         args = [
             self.executable,
             "--task",
             "tts",
+            "--family",
+            self.family,
             "--model",
             self.model,
             "--backend",
@@ -153,14 +157,12 @@ class AudioCppProvider(TtsProvider):
             "--out",
             str(output_wav),
         ]
-        if self.family:
-            args.extend(["--family", self.family])
         if voice and voice != "default":
             voice_path = Path(voice)
             if voice_path.exists():
                 args.extend(["--voice-ref", str(voice_path)])
             else:
-                args.extend(["--speaker", voice])
+                args.extend(["--voice-id", voice])
         if rate:
             speaking_rate = max(0.5, min(2.0, 1.0 + (rate * 0.05)))
             args.extend(["--speaking-rate", f"{speaking_rate:.2f}"])
@@ -170,6 +172,35 @@ class AudioCppProvider(TtsProvider):
             raise RuntimeError(f"audio.cpp synthesis failed: {detail}")
         if not output_wav.exists() or output_wav.stat().st_size == 0:
             raise RuntimeError(f"audio.cpp produced no audio: {output_wav}")
+
+
+def audio_cpp_tts_families(executable: str) -> list[str]:
+    try:
+        proc = subprocess.run(
+            [executable, "--help", "--task", "tts"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return []
+    if proc.returncode not in {0, 1}:
+        return []
+    families: list[str] = []
+    reading = False
+    for line in (proc.stdout + "\n" + proc.stderr).splitlines():
+        stripped = line.strip()
+        if stripped == "Registered families:":
+            reading = True
+            continue
+        if reading:
+            if not stripped:
+                break
+            if stripped.startswith("-"):
+                stripped = stripped[1:].strip()
+            if stripped and " " not in stripped:
+                families.append(stripped)
+    return families
 
 
 class PiperProvider(TtsProvider):

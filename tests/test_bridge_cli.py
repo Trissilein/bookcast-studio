@@ -446,11 +446,14 @@ def test_bridge_audio_cpp_health_reports_missing_config(tmp_path: Path, capsys, 
             "issues": [
                 "audio.cpp executable is not configured",
                 "audio.cpp model is not configured",
+                "audio.cpp family is not configured",
             ],
             "hints": [
                 "Build audio.cpp, then set audiocpp_cli.exe with Browse in TTS Studio or Settings.",
                 "Choose a compatible local TTS model before using the audio.cpp engine.",
+                "audio.cpp CLI requires --family for TTS, for example pocket_tts or qwen3_tts.",
             ],
+            "tts_families": [],
         }
     ]
 
@@ -472,6 +475,7 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
             return True
 
     monkeypatch.setattr("bookcast.bridge.AudioCppProvider", FakeAudioCppProvider)
+    monkeypatch.setattr("bookcast.bridge.audio_cpp_tts_families", lambda executable: ["pocket_tts", "qwen3_tts"])
 
     result = main(
         [
@@ -481,6 +485,8 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
             str(exe),
             "--audio-cpp-model",
             str(model),
+            "--audio-cpp-family",
+            "pocket_tts",
         ]
     )
     events = _events(capsys.readouterr().out)
@@ -489,7 +495,8 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
     assert events[0]["event"] == "audio_cpp_health"
     assert events[0]["healthy"] is True
     assert events[0]["issues"] == []
-    assert events[0]["hints"] == ["Family is optional; set it only if your audio.cpp model requires --family."]
+    assert events[0]["hints"] == ["Installed audio.cpp TTS families: pocket_tts, qwen3_tts"]
+    assert events[0]["tts_families"] == ["pocket_tts", "qwen3_tts"]
 
 
 def test_bridge_voices_can_use_piper_provider(capsys, monkeypatch) -> None:

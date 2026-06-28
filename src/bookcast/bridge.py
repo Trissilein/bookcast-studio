@@ -14,7 +14,7 @@ from .importers import SUPPORTED_EXTENSIONS, extract
 from .library import BookLibrary, safe_name
 from .llm import OllamaProvider
 from .podcast import PodcastTurn, generate_interactive_step, generate_podcast_script
-from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvider
+from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvider, audio_cpp_tts_families
 
 
 DEFAULT_PIPER_EXE = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe")
@@ -123,20 +123,28 @@ def audio_cpp_health(
     issues: list[str] = []
     hints: list[str] = []
     audio_cpp_exe = audio_cpp_exe or (str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else None)
+    executable_ready = False
     if not audio_cpp_exe:
         issues.append("audio.cpp executable is not configured")
         hints.append("Build audio.cpp, then set audiocpp_cli.exe with Browse in TTS Studio or Settings.")
     elif not Path(audio_cpp_exe).exists() and shutil.which(audio_cpp_exe) is None:
         issues.append(f"audio.cpp executable not found: {audio_cpp_exe}")
         hints.append("Use Browse to point to the built audiocpp_cli.exe, or rebuild audio.cpp.")
+    else:
+        executable_ready = True
     if not audio_cpp_model:
         issues.append("audio.cpp model is not configured")
         hints.append("Choose a compatible local TTS model before using the audio.cpp engine.")
     elif any(marker in audio_cpp_model for marker in ("\\", "/", ":")) and not Path(audio_cpp_model).exists():
         issues.append(f"audio.cpp model path not found: {audio_cpp_model}")
         hints.append("Use Browse to choose an existing model file, or pass a valid model name if audio.cpp supports it.")
-    if audio_cpp_model and not audio_cpp_family:
-        hints.append("Family is optional; set it only if your audio.cpp model requires --family.")
+    if not audio_cpp_family:
+        issues.append("audio.cpp family is not configured")
+        hints.append("audio.cpp CLI requires --family for TTS, for example pocket_tts or qwen3_tts.")
+
+    families = audio_cpp_tts_families(str(audio_cpp_exe)) if audio_cpp_exe and executable_ready else []
+    if families:
+        hints.append("Installed audio.cpp TTS families: " + ", ".join(families))
 
     healthy = False
     if not issues:
@@ -159,6 +167,7 @@ def audio_cpp_health(
         family=audio_cpp_family or "",
         issues=issues,
         hints=hints,
+        tts_families=families,
     )
     return 0 if healthy else 1
 
@@ -713,6 +722,8 @@ def _tts_provider(
             raise RuntimeError("audio.cpp executable is required")
         if not audio_cpp_model:
             raise RuntimeError("audio.cpp model is required")
+        if not audio_cpp_family:
+            raise RuntimeError("audio.cpp family is required")
         return AudioCppProvider(
             audio_cpp_exe,
             model=audio_cpp_model,

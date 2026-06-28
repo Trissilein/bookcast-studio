@@ -122,7 +122,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge voices
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
 .\.venv\Scripts\bookcast bridge tts-test --library .\library --text "Engine smoke test."
-.\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model
+.\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model --audio-cpp-family pocket_tts
 .\.venv\Scripts\bookcast bridge source-probe .\samples\book.epub
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge cleanup-profiles --library .\library
@@ -152,12 +152,13 @@ The default Windows CLI path is:
 D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe
 ```
 
-Rendering through `audio.cpp` requires a model path/name and usually a family
-name. The provider calls `audiocpp_cli --task tts --mode offline`; a voice value
-that points to an existing WAV file is passed as `--voice-ref`, otherwise it is
-passed as `--speaker`. Use `Check audio.cpp` in the Rust workbench to validate
-both the upstream pin and the local executable/model configuration. Health
-checks return setup hints for missing executable/model paths and optional family.
+Rendering through `audio.cpp` requires a model path/name and a family such as
+`pocket_tts` or `qwen3_tts`. The provider calls
+`audiocpp_cli --task tts --family <family> --mode offline`; a voice value that
+points to an existing WAV file is passed as `--voice-ref`, otherwise it is
+passed as `--voice-id`. Use `Check audio.cpp` in the Rust workbench to validate
+the upstream pin, local executable/model/family configuration, and registered
+TTS families.
 
 ## Import From Calibre
 
