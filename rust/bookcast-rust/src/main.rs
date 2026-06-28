@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -856,8 +856,26 @@ fn main() -> Result<(), slint::PlatformError> {
     load_settings(&app, &state.repo_root);
     refresh_readiness(app.as_weak());
 
-    wire_callbacks(&app, state);
+    wire_callbacks(&app, state.clone());
+    schedule_startup_preview(app.as_weak(), state);
     app.run()
+}
+
+fn schedule_startup_preview(weak: slint::Weak<AppWindow>, state: AppState) {
+    slint::Timer::single_shot(Duration::from_millis(300), move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            return;
+        }
+        app.set_status_text("Loading saved book preview...".into());
+        run_bridge(
+            app.as_weak(),
+            state,
+            "startup preview",
+            preview_args(&app, book_id),
+        );
+    });
 }
 
 fn wire_callbacks(app: &AppWindow, state: AppState) {

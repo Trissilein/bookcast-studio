@@ -123,6 +123,8 @@ early.
 prints the packaged executable path for manual testing.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
 workbench at that book, and launches the desktop app for hands-on testing.
+When a saved book id exists, the Rust workbench auto-loads that book preview on
+startup.
 
 ## Import From CLI
 
