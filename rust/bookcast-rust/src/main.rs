@@ -34,6 +34,7 @@ export component AppWindow inherits Window {
     in-out property <string> audio-cpp-model: "";
     in-out property <string> audio-cpp-backend: "cpu";
     in-out property <string> audio-cpp-family: "";
+    in-out property <string> audio-cpp-family-hint: "Run Check audio.cpp to list available TTS families.";
     in-out property <string> piper-exe: "";
     in-out property <string> piper-voice-dir: "";
     in-out property <int> engine-index: 0;
@@ -306,6 +307,13 @@ export component AppWindow inherits Window {
                                     Text { text: "Family"; color: rgb(89, 99, 93); }
                                     LineEdit { text <=> root.audio-cpp-family; }
                                 }
+                            }
+                            Text {
+                                visible: root.engine-index == 2;
+                                text: root.audio-cpp-family-hint;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
                             }
 
                             Button { text: "Render Sample"; clicked => { root.sample-render(); } }
@@ -683,6 +691,12 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.audio-cpp-backend; }
                             Text { text: "audio.cpp family"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.audio-cpp-family; }
+                            Text {
+                                text: root.audio-cpp-family-hint;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
                             Text { text: "Ollama URL"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.ollama-url; }
                             Text { text: "Ollama model"; color: rgb(89, 99, 93); }
@@ -2625,6 +2639,10 @@ fn summarize_output(text: &str) -> String {
 }
 
 fn json_string_list(value: &Value, key: &str) -> String {
+    json_string_vec(value, key).join("\n")
+}
+
+fn json_string_vec(value: &Value, key: &str) -> Vec<String> {
     value
         .get(key)
         .and_then(Value::as_array)
@@ -2632,10 +2650,18 @@ fn json_string_list(value: &Value, key: &str) -> String {
             items
                 .iter()
                 .filter_map(Value::as_str)
+                .map(str::to_string)
                 .collect::<Vec<_>>()
-                .join("\n")
         })
         .unwrap_or_default()
+}
+
+fn preferred_audio_cpp_family(families: &[String]) -> Option<&str> {
+    const PREFERRED: [&str; 5] = ["pocket_tts", "qwen3_tts", "miotts", "voxcpm2", "chatterbox"];
+    PREFERRED
+        .iter()
+        .find(|preferred| families.iter().any(|family| family == **preferred))
+        .copied()
 }
 
 fn source_probe_summary(value: &Value) -> String {
@@ -2870,6 +2896,21 @@ fn handle_bridge_events(
                     })
                     .unwrap_or_default();
                 let hints = json_string_list(&value, "hints");
+                let families = json_string_vec(&value, "tts_families");
+                let family_hint = if families.is_empty() {
+                    "No audio.cpp TTS families reported. Check executable path and build."
+                        .to_string()
+                } else {
+                    format!(
+                        "Available audio.cpp families: {}. Use one in Family; known TTS defaults are pocket_tts or qwen3_tts.",
+                        families.join(", ")
+                    )
+                };
+                set_audio_family_hint(weak.clone(), &family_hint);
+                let suggested_family = preferred_audio_cpp_family(&families).map(str::to_string);
+                if let Some(family) = suggested_family.as_deref() {
+                    set_audio_family_if_empty(weak.clone(), family);
+                }
                 if healthy {
                     set_engine_check(
                         weak.clone(),
@@ -2900,7 +2941,19 @@ fn handle_bridge_events(
                     };
                     set_engine_check(weak.clone(), &format!("Engine check failed: {detail}"));
                     set_audio_status(weak.clone(), &format!("audio.cpp: {detail}"));
-                    if hints.is_empty() {
+                    if let Some(family) = suggested_family.as_deref() {
+                        let hint_block = if hints.is_empty() {
+                            String::new()
+                        } else {
+                            format!("\n\nHints:\n{hints}")
+                        };
+                        set_guide(
+                            weak.clone(),
+                            &format!(
+                                "Fix audio.cpp config: {detail}\n\nSuggested family filled if empty: {family}. Click Check audio.cpp again after model/family are set.{hint_block}"
+                            ),
+                        );
+                    } else if hints.is_empty() {
                         set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
                     } else {
                         set_guide(
@@ -3788,6 +3841,26 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_audio_family_hint(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_audio_cpp_family_hint(text.into());
+        }
+    });
+}
+
+fn set_audio_family_if_empty(weak: slint::Weak<AppWindow>, family: &str) {
+    let family = family.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            if app.get_audio_cpp_family().to_string().trim().is_empty() {
+                app.set_audio_cpp_family(family.into());
+            }
+        }
+    });
+}
+
 fn set_engine_check(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let refresh_weak = weak.clone();
@@ -3811,6 +3884,7 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::parse_chapter_index;
+    use super::preferred_audio_cpp_family;
     use super::queue_summary;
     use super::render_preflight_problem_from;
     use super::source_probe_summary;
@@ -3966,6 +4040,19 @@ mod tests {
             audio_cpp_update_status(pinned, remote),
             "audio.cpp: Update Available, pinned aaaaaaaaaaaa remote 111111111111"
         );
+    }
+
+    #[test]
+    fn preferred_audio_cpp_family_uses_known_tts_families_only() {
+        let families = vec![
+            "qwen3_asr".to_string(),
+            "pocket_tts".to_string(),
+            "qwen3_tts".to_string(),
+        ];
+        assert_eq!(preferred_audio_cpp_family(&families), Some("pocket_tts"));
+
+        let families = vec!["qwen3_asr".to_string(), "silero_vad".to_string()];
+        assert_eq!(preferred_audio_cpp_family(&families), None);
     }
 
     #[test]
