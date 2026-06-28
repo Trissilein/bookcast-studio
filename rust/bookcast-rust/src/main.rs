@@ -62,6 +62,7 @@ export component AppWindow inherits Window {
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> queue-summary: "No active jobs. Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
+    in-out property <string> setup-checklist-text: "[ ] Diagnostics\n[ ] Book selected\n[ ] Engine checked\n[ ] Sample rendered";
     in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
@@ -182,7 +183,7 @@ export component AppWindow inherits Window {
                     spacing: 14px;
 
                     Rectangle {
-                        width: 660px;
+                        width: 640px;
                         visible: root.current-view == 0;
                         background: rgb(255, 255, 255);
                         border-color: rgb(215, 208, 191);
@@ -736,6 +737,52 @@ export component AppWindow inherits Window {
                             Text { text: "Ollama model"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.ollama-model; }
                             Button { text: "Save Settings"; clicked => { root.save-settings(); } }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 280px;
+                        background: rgb(250, 247, 238);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+
+                            Text { text: "Inspector"; font-size: 18px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Next step"; color: rgb(89, 99, 93); font-size: 13px; }
+                            Text {
+                                text: root.readiness-text;
+                                color: rgb(45, 69, 58);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Setup checklist"; color: rgb(89, 99, 93); font-size: 13px; }
+                            Text {
+                                text: root.setup-checklist-text;
+                                color: rgb(32, 36, 31);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Guidance"; color: rgb(89, 99, 93); font-size: 13px; }
+                            Text {
+                                text: root.guide-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Diagnostics"; color: rgb(89, 99, 93); font-size: 13px; }
+                            Text {
+                                text: root.diagnostic-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                         }
                     }
                 }
@@ -2698,9 +2745,19 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
                 &app.get_last_output_path().to_string(),
                 &summary,
             );
+            let checklist = setup_checklist(
+                &app.get_library_path().to_string(),
+                &app.get_diagnostic_text().to_string(),
+                &app.get_book_id().to_string(),
+                app.get_engine_index(),
+                &app.get_engine_check_text().to_string(),
+                &app.get_last_output_path().to_string(),
+                &summary,
+            );
             app.set_queue_text(text.into());
             app.set_queue_summary(summary.into());
             app.set_readiness_text(readiness.into());
+            app.set_setup_checklist_text(checklist.into());
         }
     });
 }
@@ -2775,6 +2832,42 @@ fn workbench_readiness(
     format!("Output ready: {last_output}. Open file or render another format.")
 }
 
+fn setup_checklist(
+    library_path: &str,
+    diagnostic_text: &str,
+    book_id: &str,
+    engine_index: i32,
+    engine_check: &str,
+    last_output: &str,
+    queue_summary: &str,
+) -> String {
+    let diagnostics_done = !diagnostic_text.contains("Run diagnostics")
+        && !diagnostic_text.contains("not run")
+        && !diagnostic_text.trim().is_empty();
+    let book_selected = !book_id.trim().is_empty();
+    let engine_ready = if engine_index == 2 {
+        engine_check.contains("audio.cpp ready")
+    } else {
+        engine_check.contains("OK") || engine_check.contains("voices")
+    };
+    let sample_or_output_done = !last_output.trim().is_empty();
+    let queue_ok = !queue_summary.starts_with("Attention:");
+
+    [
+        checklist_line("Library path set", !library_path.trim().is_empty()),
+        checklist_line("Diagnostics run", diagnostics_done),
+        checklist_line("Book selected", book_selected),
+        checklist_line("Engine checked", engine_ready),
+        checklist_line("Sample or output rendered", sample_or_output_done),
+        checklist_line("Queue healthy", queue_ok),
+    ]
+    .join("\n")
+}
+
+fn checklist_line(label: &str, done: bool) -> String {
+    format!("{} {}", if done { "[x]" } else { "[ ]" }, label)
+}
+
 fn refresh_readiness(weak: slint::Weak<AppWindow>) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
@@ -2785,7 +2878,17 @@ fn refresh_readiness(weak: slint::Weak<AppWindow>) {
                 &app.get_last_output_path().to_string(),
                 &app.get_queue_summary().to_string(),
             );
+            let checklist = setup_checklist(
+                &app.get_library_path().to_string(),
+                &app.get_diagnostic_text().to_string(),
+                &app.get_book_id().to_string(),
+                app.get_engine_index(),
+                &app.get_engine_check_text().to_string(),
+                &app.get_last_output_path().to_string(),
+                &app.get_queue_summary().to_string(),
+            );
             app.set_readiness_text(readiness.into());
+            app.set_setup_checklist_text(checklist.into());
         }
     });
 }
@@ -3787,11 +3890,13 @@ fn set_status(weak: slint::Weak<AppWindow>, text: &str) {
 
 fn set_diagnostics(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
+    let refresh_weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_diagnostic_text(text.into());
         }
     });
+    refresh_readiness(refresh_weak);
 }
 
 fn set_books(weak: slint::Weak<AppWindow>, text: &str) {
@@ -4108,6 +4213,7 @@ mod tests {
     use super::progress_bar;
     use super::queue_summary;
     use super::render_preflight_problem_from;
+    use super::setup_checklist;
     use super::source_probe_summary;
     use super::split_ids;
     use super::tts_test_preflight_problem_from;
@@ -4491,5 +4597,40 @@ mod tests {
             ),
             "Running: render at 3% - started"
         );
+    }
+
+    #[test]
+    fn setup_checklist_tracks_manual_test_readiness() {
+        let checklist = setup_checklist(
+            "D:\\GIT\\bookcast-studio\\.manual-test\\library",
+            "Diagnostics OK",
+            "book-1",
+            1,
+            "Engine check OK: piper returned 1 voices.",
+            "D:\\out\\book.opus",
+            "No active jobs. Queue idle.",
+        );
+
+        assert!(checklist.contains("[x] Library path set"));
+        assert!(checklist.contains("[x] Diagnostics run"));
+        assert!(checklist.contains("[x] Book selected"));
+        assert!(checklist.contains("[x] Engine checked"));
+        assert!(checklist.contains("[x] Sample or output rendered"));
+        assert!(checklist.contains("[x] Queue healthy"));
+
+        let blocked = setup_checklist(
+            "library",
+            "Run diagnostics before importing.",
+            "",
+            2,
+            "Engine check: not run",
+            "",
+            "Attention: render failed - missing model",
+        );
+        assert!(blocked.contains("[ ] Diagnostics run"));
+        assert!(blocked.contains("[ ] Book selected"));
+        assert!(blocked.contains("[ ] Engine checked"));
+        assert!(blocked.contains("[ ] Sample or output rendered"));
+        assert!(blocked.contains("[ ] Queue healthy"));
     }
 }
