@@ -102,6 +102,7 @@ Packaged Windows build:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui_launch_smoke.ps1
 .\dist\bookcast-studio-windows\bookcast-studio.exe
 ```
 
@@ -114,6 +115,8 @@ Fast smoke without packaging:
 The smoke imports a TXT source, renders sample + full Opus through Windows SAPI,
 checks output registration, and validates rendered audio duration with `ffprobe`.
 If the local Trispr-Flow Piper install exists, it also renders a Piper sample.
+The UI launch smoke starts the packaged desktop app briefly and fails if it exits
+early.
 
 ## Import From CLI
 
