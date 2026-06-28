@@ -56,7 +56,9 @@ export component AppWindow inherits Window {
     in-out property <string> interactive-seed-prompt: "";
     in-out property <int> podcast-mode-index: 0;
     in-out property <string> queue-text: "Queue idle.";
+    in-out property <string> queue-summary: "No active jobs. Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
+    in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
@@ -159,6 +161,7 @@ export component AppWindow inherits Window {
                             spacing: 5px;
                             Text { text: "Workbench"; font-size: 24px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: root.status-text; font-size: 14px; color: rgb(89, 99, 93); }
+                            Text { text: root.readiness-text; font-size: 13px; color: rgb(45, 69, 58); wrap: word-wrap; }
                         }
 
                         Button { text: "Diagnose"; clicked => { root.diagnose(); } }
@@ -693,6 +696,7 @@ export component AppWindow inherits Window {
                         padding: 14px;
                         spacing: 8px;
                         Text { text: "Queue"; color: rgb(248, 241, 222); font-size: 18px; font-weight: 700; }
+                        Text { text: root.queue-summary; color: rgb(242, 200, 121); font-size: 13px; wrap: word-wrap; }
                         HorizontalLayout {
                             spacing: 8px;
                             Button { text: "Retry Last"; clicked => { root.retry-job(); } }
@@ -797,6 +801,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     app.set_guide_text("Run Diagnose. If ffmpeg and TTS are ready, import a file or scan Calibre. Render jobs go through the queue and can be cancelled.".into());
     load_settings(&app, &state.repo_root);
+    refresh_readiness(app.as_weak());
 
     wire_callbacks(&app, state);
     app.run()
@@ -2430,31 +2435,102 @@ fn update_job_detail(
 }
 
 fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
-    let text = {
+    let (summary, text) = {
         let jobs = jobs.lock().expect("jobs lock");
         if jobs.is_empty() {
-            "Queue idle.".to_string()
+            (
+                "No active jobs. Queue idle.".to_string(),
+                "Queue idle.".to_string(),
+            )
         } else {
-            jobs.iter()
-                .rev()
-                .take(8)
-                .map(|job| {
-                    format!(
-                        "#{:05} | {:>7} | {:>3}% | {:<12} | {}",
-                        job.id % 100000,
-                        job.status,
-                        job.progress,
-                        job.label,
-                        job.detail
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+            (
+                queue_summary(&jobs),
+                jobs.iter()
+                    .rev()
+                    .take(8)
+                    .map(|job| {
+                        format!(
+                            "#{:05} | {:>7} | {:>3}% | {:<12} | {}",
+                            job.id % 100000,
+                            job.status,
+                            job.progress,
+                            job.label,
+                            job.detail
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
         }
     };
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
+            let readiness = workbench_readiness(
+                &app.get_book_id().to_string(),
+                app.get_engine_index(),
+                &app.get_engine_check_text().to_string(),
+                &app.get_last_output_path().to_string(),
+                &summary,
+            );
             app.set_queue_text(text.into());
+            app.set_queue_summary(summary.into());
+            app.set_readiness_text(readiness.into());
+        }
+    });
+}
+
+fn queue_summary(jobs: &[JobState]) -> String {
+    if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
+        return format!(
+            "Running: {} at {}% - {}",
+            job.label, job.progress, job.detail
+        );
+    }
+    if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
+        return format!("Attention: {} failed - {}", job.label, job.detail);
+    }
+    if let Some(job) = jobs.last() {
+        return format!("Last done: {} - {}", job.label, job.detail);
+    }
+    "No active jobs. Queue idle.".to_string()
+}
+
+fn workbench_readiness(
+    book_id: &str,
+    engine_index: i32,
+    engine_check: &str,
+    last_output: &str,
+    queue_summary: &str,
+) -> String {
+    if queue_summary.starts_with("Running:") || queue_summary.starts_with("Attention:") {
+        return queue_summary.to_string();
+    }
+    if book_id.trim().is_empty() {
+        return "Next: import a source or Refresh Books to select a book.".to_string();
+    }
+    if engine_index == 2 && !engine_check.contains("audio.cpp ready") {
+        return "Next: Check audio.cpp before rendering with audio.cpp.".to_string();
+    }
+    if !engine_check.contains("OK") {
+        return "Next: Check Engine, then render a short sample.".to_string();
+    }
+    if last_output.trim().is_empty() {
+        return "Ready for sample render. Full render after sample sounds acceptable.".to_string();
+    }
+    format!("Output ready: {last_output}. Open file or render another format.")
+}
+
+fn refresh_readiness(weak: slint::Weak<AppWindow>) {
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            let readiness = workbench_readiness(
+                &app.get_book_id().to_string(),
+                app.get_engine_index(),
+                &app.get_engine_check_text().to_string(),
+                &app.get_last_output_path().to_string(),
+                &app.get_queue_summary().to_string(),
+            );
+            app.set_readiness_text(readiness.into());
         }
     });
 }
@@ -3509,11 +3585,13 @@ fn set_voice_name(weak: slint::Weak<AppWindow>, text: &str) {
 
 fn set_last_output(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
+    let refresh_weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_last_output_path(text.into());
         }
     });
+    refresh_readiness(refresh_weak);
 }
 
 fn set_output_list(weak: slint::Weak<AppWindow>, text: &str) {
@@ -3536,11 +3614,13 @@ fn set_guide(weak: slint::Weak<AppWindow>, text: &str) {
 
 fn set_book_id(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
+    let refresh_weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_book_id(text.into());
         }
     });
+    refresh_readiness(refresh_weak);
 }
 
 fn set_current_view(weak: slint::Weak<AppWindow>, view: i32) {
@@ -3553,6 +3633,7 @@ fn set_current_view(weak: slint::Weak<AppWindow>, view: i32) {
 
 fn set_book_id_if_empty(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
+    let refresh_weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             if app.get_book_id().to_string().trim().is_empty() {
@@ -3560,6 +3641,7 @@ fn set_book_id_if_empty(weak: slint::Weak<AppWindow>, text: &str) {
             }
         }
     });
+    refresh_readiness(refresh_weak);
 }
 
 fn prefer_piper_engine(weak: slint::Weak<AppWindow>) {
@@ -3610,11 +3692,13 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
 
 fn set_engine_check(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
+    let refresh_weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_engine_check_text(text.into());
         }
     });
+    refresh_readiness(refresh_weak);
 }
 
 #[cfg(test)]
@@ -3628,10 +3712,13 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::parse_chapter_index;
+    use super::queue_summary;
     use super::render_preflight_problem_from;
     use super::source_probe_summary;
     use super::split_ids;
     use super::tts_test_preflight_problem_from;
+    use super::workbench_readiness;
+    use super::JobState;
 
     #[test]
     fn render_preflight_requires_book_id() {
@@ -3801,6 +3888,80 @@ mod tests {
         assert_eq!(
             job_progress_detail(&json!({"phase":"tts","chunk":2,"total":5,"cached":false})),
             "tts 2/5 rendered"
+        );
+    }
+
+    #[test]
+    fn queue_summary_prefers_running_then_failed_then_last_done() {
+        let jobs = vec![
+            JobState {
+                id: 1,
+                label: "import".to_string(),
+                status: "done".to_string(),
+                progress: 100,
+                detail: "book-1".to_string(),
+            },
+            JobState {
+                id: 2,
+                label: "render".to_string(),
+                status: "running".to_string(),
+                progress: 42,
+                detail: "tts 2/5 rendered".to_string(),
+            },
+        ];
+        assert_eq!(
+            queue_summary(&jobs),
+            "Running: render at 42% - tts 2/5 rendered"
+        );
+
+        let failed = vec![JobState {
+            id: 3,
+            label: "calibre scan".to_string(),
+            status: "failed".to_string(),
+            progress: 100,
+            detail: "metadata.db missing".to_string(),
+        }];
+        assert_eq!(
+            queue_summary(&failed),
+            "Attention: calibre scan failed - metadata.db missing"
+        );
+    }
+
+    #[test]
+    fn workbench_readiness_guides_next_action() {
+        assert_eq!(
+            workbench_readiness("", 0, "", "", "No active jobs. Queue idle."),
+            "Next: import a source or Refresh Books to select a book."
+        );
+        assert_eq!(
+            workbench_readiness(
+                "book-1",
+                2,
+                "Engine check: not run",
+                "",
+                "No active jobs. Queue idle."
+            ),
+            "Next: Check audio.cpp before rendering with audio.cpp."
+        );
+        assert_eq!(
+            workbench_readiness(
+                "book-1",
+                1,
+                "Engine check OK: piper returned 1 voices.",
+                "",
+                "No active jobs. Queue idle."
+            ),
+            "Ready for sample render. Full render after sample sounds acceptable."
+        );
+        assert_eq!(
+            workbench_readiness(
+                "book-1",
+                1,
+                "Engine check OK",
+                "",
+                "Running: render at 3% - started"
+            ),
+            "Running: render at 3% - started"
         );
     }
 }

@@ -19,6 +19,7 @@ Current slice:
 - Text cleanup and stable chunk hashes.
 - Editable cleanup profiles and chapter review/editing in the Python UI and Rust Library view.
 - Character and podcast workbench views in the Rust UI.
+- Header readiness guidance and queue summary for the next safe action.
 
 Planned later:
 
@@ -50,6 +51,9 @@ Python bridge: missing book id, unsupported output format, missing Piper exe, or
 missing `audio.cpp` executable/model.
 Render jobs emit chunk/turn-level progress for TTS and assembly so the queue can
 show where long audiobook or podcast renders currently are.
+The header shows the next safe action from current book, engine-check, output,
+and queue state; the queue footer highlights the active or failed job before the
+raw job log.
 Imports emit the first book preview automatically and the Rust workbench switches
 back to TTS Studio, reducing manual book-id copy/paste after file or Calibre import.
 `Refresh Books` in the Rust workbench also asks the bridge for a first-book
