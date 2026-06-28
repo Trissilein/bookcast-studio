@@ -62,6 +62,7 @@ export component AppWindow inherits Window {
     in-out property <int> podcast-mode-index: 0;
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> queue-summary: "No active jobs. Queue idle.";
+    in-out property <string> queue-action-text: "Queue action: start an import, engine check, or render job.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
     in-out property <string> setup-checklist-text: "[ ] Diagnostics\n[ ] Book selected\n[ ] Engine checked\n[ ] Sample rendered";
     in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
@@ -890,6 +891,7 @@ export component AppWindow inherits Window {
                         spacing: 8px;
                         Text { text: "Queue"; color: rgb(248, 241, 222); font-size: 18px; font-weight: 700; }
                         Text { text: root.queue-summary; color: rgb(242, 200, 121); font-size: 13px; wrap: word-wrap; }
+                        Text { text: root.queue-action-text; color: rgb(248, 241, 222); font-size: 13px; wrap: word-wrap; }
                         HorizontalLayout {
                             spacing: 8px;
                             Button { text: "Retry Last"; clicked => { root.retry-job(); } }
@@ -2841,16 +2843,18 @@ fn update_job_detail(
 }
 
 fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
-    let (summary, text) = {
+    let (summary, action, text) = {
         let jobs = jobs.lock().expect("jobs lock");
         if jobs.is_empty() {
             (
                 "No active jobs. Queue idle.".to_string(),
+                "Queue action: start an import, engine check, or render job.".to_string(),
                 "Queue idle.".to_string(),
             )
         } else {
             (
                 queue_summary(&jobs),
+                queue_action(&jobs),
                 jobs.iter()
                     .rev()
                     .take(8)
@@ -2880,6 +2884,7 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
             );
             app.set_queue_text(text.into());
             app.set_queue_summary(summary.into());
+            app.set_queue_action_text(action.into());
             app.set_readiness_text(readiness.into());
             app.set_setup_checklist_text(checklist.into());
             app.set_engine_setup_text(engine_setup_text(&app).into());
@@ -2890,17 +2895,53 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
 fn queue_summary(jobs: &[JobState]) -> String {
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
         return format!(
-            "Running: {} at {}% - {}",
+            "Running: {} at {}% | {}",
             job.label, job.progress, job.detail
         );
     }
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
-        return format!("Attention: {} failed - {}", job.label, job.detail);
+        return format!("Attention: {} failed | {}", job.label, job.detail);
     }
     if let Some(job) = jobs.last() {
-        return format!("Last done: {} - {}", job.label, job.detail);
+        return format!("Last done: {} | {}", job.label, job.detail);
     }
     "No active jobs. Queue idle.".to_string()
+}
+
+fn queue_action(jobs: &[JobState]) -> String {
+    if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
+        return format!(
+            "Queue action: wait for {} or click Cancel. Current step: {}.",
+            job.label, job.detail
+        );
+    }
+    if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
+        return format!(
+            "Queue action: fix the issue, then Retry Last. Failed step: {}.",
+            job.detail
+        );
+    }
+    if let Some(job) = jobs.last() {
+        if job.status == "done" && looks_like_output_path(&job.detail) {
+            return "Queue action: output exists. Use Open File to play or Open Folder to inspect."
+                .to_string();
+        }
+        if job.status == "done" {
+            return format!(
+                "Queue action: {} completed. Continue with the next guided step.",
+                job.label
+            );
+        }
+    }
+    "Queue action: start an import, engine check, or render job.".to_string()
+}
+
+fn looks_like_output_path(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.ends_with(".opus")
+        || lower.ends_with(".mp3")
+        || lower.ends_with(".wav")
+        || lower.ends_with(".m4b")
 }
 
 fn progress_bar(progress: u8) -> String {
@@ -4462,6 +4503,7 @@ mod tests {
     use super::parse_chapter_index;
     use super::preferred_audio_cpp_family;
     use super::progress_bar;
+    use super::queue_action;
     use super::queue_summary;
     use super::render_preflight_problem_from;
     use super::setup_checklist;
@@ -4798,7 +4840,11 @@ mod tests {
         ];
         assert_eq!(
             queue_summary(&jobs),
-            "Running: render at 42% - tts 2/5 rendered"
+            "Running: render at 42% | tts 2/5 rendered"
+        );
+        assert_eq!(
+            queue_action(&jobs),
+            "Queue action: wait for render or click Cancel. Current step: tts 2/5 rendered."
         );
 
         let failed = vec![JobState {
@@ -4810,7 +4856,31 @@ mod tests {
         }];
         assert_eq!(
             queue_summary(&failed),
-            "Attention: calibre scan failed - metadata.db missing"
+            "Attention: calibre scan failed | metadata.db missing"
+        );
+        assert_eq!(
+            queue_action(&failed),
+            "Queue action: fix the issue, then Retry Last. Failed step: metadata.db missing."
+        );
+    }
+
+    #[test]
+    fn queue_action_points_to_output_when_done() {
+        let jobs = vec![JobState {
+            id: 4,
+            label: "render".to_string(),
+            status: "done".to_string(),
+            progress: 100,
+            detail: "D:\\out\\book.opus".to_string(),
+        }];
+
+        assert_eq!(
+            queue_summary(&jobs),
+            "Last done: render | D:\\out\\book.opus"
+        );
+        assert_eq!(
+            queue_action(&jobs),
+            "Queue action: output exists. Use Open File to play or Open Folder to inspect."
         );
     }
 
