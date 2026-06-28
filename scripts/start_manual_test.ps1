@@ -70,7 +70,7 @@ $Workbench = [ordered]@{
     interactive_seed_prompt = ""
     podcast_mode_index = 0
     engine_index = 0
-    current_view = 0
+    current_view = 6
 }
 $Workbench | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $Settings -Encoding UTF8
 
