@@ -7,12 +7,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .assembler import assemble_audio
 from .calibre import CalibreClient, diagnose_calibre_library, find_calibredb
 from .characters import suggest_characters as generate_character_suggestions
 from .importers import SUPPORTED_EXTENSIONS, extract
-from .library import BookLibrary
+from .library import BookLibrary, safe_name
 from .llm import OllamaProvider
-from .podcast import generate_podcast_script
+from .podcast import PodcastTurn, generate_interactive_step, generate_podcast_script
 from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvider
 
 
@@ -313,6 +314,113 @@ def podcast_render(
     emit("outputs", outputs=outputs_payload)
     emit("job_progress", job="podcast_render", progress=100)
     emit("job_done", job="podcast_render", output=str(output), count=len(script.turns))
+    return 0
+
+
+def podcast_interactive(
+    library_root: Path,
+    book_id: str,
+    mode: str = "educational",
+    output_format: str = "opus",
+    voice_entries: list[str] | None = None,
+    rate: int = 0,
+    turns: int = 4,
+    seed_prompt: str | None = None,
+    ffmpeg: str = "ffmpeg",
+    ollama_url: str = "http://127.0.0.1:11434",
+    model: str = "qwen3:8b",
+    provider: str = "windows_sapi",
+    audio_cpp_exe: str | None = None,
+    audio_cpp_model: str | None = None,
+    audio_cpp_backend: str = "cpu",
+    audio_cpp_family: str | None = None,
+    piper_exe: str | None = None,
+    piper_voice_dir: str | None = None,
+    piper_model: str | None = None,
+) -> int:
+    emit("job_started", job="podcast_interactive", book_id=book_id, mode=mode, turns=turns)
+    library = BookLibrary(library_root)
+    try:
+        book = library.get_book(book_id)
+        if not book:
+            raise ValueError(f"Unknown book id: {book_id}")
+        text = library.get_book_text(book_id)
+        llm = OllamaProvider(model=model, base_url=ollama_url)
+        if not llm.health():
+            raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+        tts_provider = _tts_provider(
+            provider,
+            audio_cpp_exe=audio_cpp_exe,
+            audio_cpp_model=audio_cpp_model,
+            audio_cpp_backend=audio_cpp_backend,
+            audio_cpp_family=audio_cpp_family,
+            piper_exe=piper_exe,
+            piper_voice_dir=piper_voice_dir,
+            piper_model=piper_model,
+        )
+        voice_map = _parse_voice_entries(voice_entries or [])
+        session_dir = library.root / "books" / book_id / "podcasts" / "interactive" / safe_name(str(book["title"]))
+        chunk_dir = session_dir / "audio_chunks"
+        output_dir = session_dir / "output"
+        chunk_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        transcript: list[PodcastTurn] = []
+        rendered: list[Path] = []
+        interruption = seed_prompt
+        total = max(1, turns)
+        emit("job_progress", job="podcast_interactive", phase="llm", progress=10, chunk=0, total=total)
+        for index in range(total):
+            step = generate_interactive_step(text, llm, mode, transcript, interruption=interruption)
+            if not step.text:
+                raise RuntimeError("Interactive podcast generated an empty turn")
+            wav_path = chunk_dir / f"turn_{index:04d}_{safe_name(step.speaker)}.wav"
+            tts_provider.synthesize(step.text, wav_path, voice=voice_map.get(step.speaker), rate=rate)
+            rendered.append(wav_path)
+            transcript.append(PodcastTurn(speaker=step.speaker, text=step.text))
+            interruption = step.follow_up or None
+            progress = 10 + int((index + 1) / total * 75)
+            emit(
+                "interactive_turn",
+                speaker=step.speaker,
+                text=step.text,
+                follow_up=step.follow_up,
+                turn=index + 1,
+                total=total,
+            )
+            emit(
+                "job_progress",
+                job="podcast_interactive",
+                phase="tts",
+                progress=progress,
+                chunk=index + 1,
+                total=total,
+                speaker=step.speaker,
+            )
+        state_path = session_dir / "session.json"
+        state_path.write_text(
+            json.dumps(
+                {
+                    "book_id": book_id,
+                    "mode": mode,
+                    "turns": [turn.__dict__ for turn in transcript],
+                    "seed_prompt": seed_prompt or "",
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        emit("job_progress", job="podcast_interactive", phase="assemble", progress=92, chunk=total, total=total)
+        output = output_dir / f"{safe_name(str(book['author']))} - {safe_name(str(book['title']))}_interactive.{output_format.lower()}"
+        assemble_audio(rendered, output, output_format, ffmpeg=ffmpeg)
+        library.add_output(book_id, output_format, output)
+        outputs_payload = library.list_outputs(book_id)
+    finally:
+        library.close()
+    emit("interactive_podcast", output=str(output), state=str(state_path), turns=[turn.__dict__ for turn in transcript])
+    emit("outputs", outputs=outputs_payload)
+    emit("job_progress", job="podcast_interactive", progress=100)
+    emit("job_done", job="podcast_interactive", output=str(output), count=len(transcript))
     return 0
 
 

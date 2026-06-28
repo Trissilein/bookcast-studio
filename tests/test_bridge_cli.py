@@ -481,6 +481,8 @@ def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) 
     book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
 
     class FakeOllama:
+        calls: list[str] = []
+
         def __init__(self, model: str, base_url: str) -> None:
             self.model = model
             self.base_url = base_url
@@ -510,6 +512,8 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     book_id = str(next(event["book_id"] for event in _events(capsys.readouterr().out) if event.get("event") == "job_done"))
 
     class FakeOllama:
+        calls: list[str] = []
+
         def __init__(self, model: str, base_url: str) -> None:
             self.model = model
             self.base_url = base_url
@@ -518,6 +522,10 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
             return True
 
         def generate(self, prompt: str, mode: str = "json") -> str:
+            self.calls.append(prompt)
+            if "continuing a live podcast" in prompt:
+                speaker = "host" if len(self.calls) <= 3 else "explainer"
+                return f'{{"speaker":"{speaker}","text":"Live turn {len(self.calls)}.","follow_up":"continue"}}'
             return (
                 '{"title":"Engineering Cast","summary":"Short.",'
                 '"speakers":["host","explainer"],'
@@ -581,3 +589,27 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     assert any(event.get("event") == "outputs" and event.get("outputs") for event in render_events)
     assert render_events[-1]["event"] == "job_done"
     assert render_events[-1]["output"].endswith(".opus")
+
+    monkeypatch.setattr("bookcast.bridge.assemble_audio", fake_assemble)
+    result = main(
+        [
+            "bridge",
+            "podcast-interactive",
+            book_id,
+            "--library",
+            str(library_root),
+            "--turns",
+            "2",
+            "--seed-prompt",
+            "start with a practical question",
+            "--voice",
+            "host=Narrator",
+        ]
+    )
+    interactive_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert [event["event"] for event in interactive_events].count("interactive_turn") == 2
+    assert any(event.get("event") == "interactive_podcast" for event in interactive_events)
+    assert interactive_events[-1]["event"] == "job_done"
+    assert interactive_events[-1]["output"].endswith("_interactive.opus")

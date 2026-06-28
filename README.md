@@ -15,7 +15,7 @@ Current slice:
 - Piper local TTS via the existing Trispr-Flow Piper binary/voices when present.
 - ffmpeg assembly to Opus, MP3, WAV, or M4B.
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
-- Interactive podcast sessions with resident Ollama and live follow-ups.
+- Interactive podcast sessions with resident Ollama, follow-up prompts, and rendered output.
 - Text cleanup and stable chunk hashes.
 - Editable cleanup profiles and chapter review in the Python UI.
 - Character and podcast workbench views in the Rust UI.
@@ -121,6 +121,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge characters <book-id> --library .\library --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-script <book-id> --library .\library --mode educational --model qwen3:8b
 .\.venv\Scripts\bookcast bridge podcast-render <book-id> --library .\library --mode controversial --voice host=Narrator
+.\.venv\Scripts\bookcast bridge podcast-interactive <book-id> --library .\library --mode interview --turns 4 --seed-prompt "Start with the core question"
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge sample-render <book-id> --library .\library --provider piper --voice D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices\de_DE-thorsten-medium.onnx
 .\.venv\Scripts\bookcast bridge outputs --library .\library --book-id <book-id>

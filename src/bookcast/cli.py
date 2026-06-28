@@ -192,6 +192,27 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--piper-voice-dir", default=None)
     bridge_podcast_render.add_argument("--piper-model", default=None)
 
+    bridge_podcast_interactive = bridge_sub.add_parser("podcast-interactive", help="Generate and render a non-blocking interactive podcast as JSONL")
+    bridge_podcast_interactive.add_argument("book_id")
+    bridge_podcast_interactive.add_argument("--library", type=Path, required=True)
+    bridge_podcast_interactive.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
+    bridge_podcast_interactive.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
+    bridge_podcast_interactive.add_argument("--voice", action="append", default=[], help="Speaker=Voice mapping")
+    bridge_podcast_interactive.add_argument("--rate", type=int, default=0)
+    bridge_podcast_interactive.add_argument("--turns", type=int, default=4)
+    bridge_podcast_interactive.add_argument("--seed-prompt", default=None)
+    bridge_podcast_interactive.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_podcast_interactive.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    bridge_podcast_interactive.add_argument("--model", default="qwen3:8b")
+    bridge_podcast_interactive.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
+    bridge_podcast_interactive.add_argument("--audio-cpp-exe", default=None)
+    bridge_podcast_interactive.add_argument("--audio-cpp-model", default=None)
+    bridge_podcast_interactive.add_argument("--audio-cpp-backend", default="cpu")
+    bridge_podcast_interactive.add_argument("--audio-cpp-family", default=None)
+    bridge_podcast_interactive.add_argument("--piper-exe", default=None)
+    bridge_podcast_interactive.add_argument("--piper-voice-dir", default=None)
+    bridge_podcast_interactive.add_argument("--piper-model", default=None)
+
     bridge_import = bridge_sub.add_parser("import", help="Import a source and emit JSONL job events")
     bridge_import.add_argument("file", type=Path)
     bridge_import.add_argument("--library", type=Path, required=True)
@@ -327,6 +348,29 @@ def main(argv: list[str] | None = None) -> int:
                 args.format,
                 args.voice,
                 args.rate,
+                args.ffmpeg,
+                args.ollama_url,
+                args.model,
+                args.provider,
+                args.audio_cpp_exe,
+                args.audio_cpp_model,
+                args.audio_cpp_backend,
+                args.audio_cpp_family,
+                args.piper_exe,
+                args.piper_voice_dir,
+                args.piper_model,
+            )
+        if args.bridge_command == "podcast-interactive":
+            return bridge.run_safely(
+                bridge.podcast_interactive,
+                args.library,
+                args.book_id,
+                args.mode,
+                args.format,
+                args.voice,
+                args.rate,
+                args.turns,
+                args.seed_prompt,
                 args.ffmpeg,
                 args.ollama_url,
                 args.model,

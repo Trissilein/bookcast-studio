@@ -49,6 +49,8 @@ export component AppWindow inherits Window {
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
+    in-out property <string> interactive-turns: "4";
+    in-out property <string> interactive-seed-prompt: "";
     in-out property <int> podcast-mode-index: 0;
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
@@ -85,6 +87,7 @@ export component AppWindow inherits Window {
     callback suggest-characters();
     callback podcast-script();
     callback podcast-render();
+    callback podcast-interactive();
     callback discover-voices();
     callback load-outputs();
     callback open-output();
@@ -549,8 +552,20 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.speaker-voice-map; }
                             HorizontalLayout {
                                 spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Interactive turns"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.interactive-turns; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Seed prompt / first interruption"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.interactive-seed-prompt; }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
                                 Button { text: "Generate Script"; clicked => { root.podcast-script(); } }
                                 Button { text: "Render Podcast"; clicked => { root.podcast-render(); } }
+                                Button { text: "Render Interactive"; clicked => { root.podcast-interactive(); } }
                             }
                             Text {
                                 text: root.podcast-text;
@@ -719,6 +734,8 @@ struct WorkbenchSettings {
     ollama_url: String,
     ollama_model: String,
     speaker_voice_map: String,
+    interactive_turns: String,
+    interactive_seed_prompt: String,
     podcast_mode_index: i32,
     engine_index: i32,
     current_view: i32,
@@ -1303,6 +1320,32 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    let podcast_interactive_state = state.clone();
+    app.on_podcast_interactive(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let book_id = app.get_book_id().to_string();
+        if book_id.trim().is_empty() {
+            app.set_status_text("Interactive podcast needs a book id.".into());
+            return;
+        }
+        if let Some(problem) = optional_positive_limit_problem(
+            &app.get_interactive_turns().to_string(),
+            "Interactive turns",
+        ) {
+            app.set_status_text(problem.into());
+            return;
+        }
+        let args = podcast_interactive_args(&app, book_id);
+        app.set_podcast_text("Interactive podcast running...".into());
+        run_bridge(
+            app.as_weak(),
+            podcast_interactive_state.clone(),
+            "interactive podcast",
+            args,
+        );
+    });
+
+    let weak = app.as_weak();
     let refresh_state = state.clone();
     let health_state = state.clone();
     app.on_refresh_audio_cpp(move || {
@@ -1702,6 +1745,10 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
     if !settings.speaker_voice_map.is_empty() {
         app.set_speaker_voice_map(settings.speaker_voice_map.into());
     }
+    if !settings.interactive_turns.is_empty() {
+        app.set_interactive_turns(settings.interactive_turns.into());
+    }
+    app.set_interactive_seed_prompt(settings.interactive_seed_prompt.into());
     app.set_podcast_mode_index(settings.podcast_mode_index);
     let engine_index = if settings.engine_index == 1
         && (!app.get_audio_cpp_exe().to_string().is_empty()
@@ -1739,6 +1786,8 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         ollama_url: app.get_ollama_url().to_string(),
         ollama_model: app.get_ollama_model().to_string(),
         speaker_voice_map: app.get_speaker_voice_map().to_string(),
+        interactive_turns: app.get_interactive_turns().to_string(),
+        interactive_seed_prompt: app.get_interactive_seed_prompt().to_string(),
         podcast_mode_index: app.get_podcast_mode_index(),
         engine_index: app.get_engine_index(),
         current_view: app.get_current_view(),
@@ -1998,6 +2047,52 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
         "--format".into(),
         app.get_output_format().to_string(),
     ];
+    args.extend(ollama_args(app));
+    for entry in split_voice_map(&app.get_speaker_voice_map().to_string()) {
+        args.extend(["--voice".into(), entry]);
+    }
+    if app.get_engine_index() == 1 {
+        args.extend(piper_args(app));
+    } else if app.get_engine_index() == 2 {
+        args.extend(["--provider".into(), "audio_cpp".into()]);
+        args.extend([
+            "--audio-cpp-exe".into(),
+            app.get_audio_cpp_exe().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-model".into(),
+            app.get_audio_cpp_model().to_string(),
+        ]);
+        args.extend([
+            "--audio-cpp-backend".into(),
+            app.get_audio_cpp_backend().to_string(),
+        ]);
+        let family = app.get_audio_cpp_family().to_string();
+        if !family.trim().is_empty() {
+            args.extend(["--audio-cpp-family".into(), family]);
+        }
+    }
+    args
+}
+
+fn podcast_interactive_args(app: &AppWindow, book_id: String) -> Vec<String> {
+    let mut args = vec![
+        "bridge".into(),
+        "podcast-interactive".into(),
+        book_id,
+        "--library".into(),
+        app.get_library_path().to_string(),
+        "--mode".into(),
+        podcast_mode(app.get_podcast_mode_index()).into(),
+        "--format".into(),
+        app.get_output_format().to_string(),
+        "--turns".into(),
+        app.get_interactive_turns().to_string(),
+    ];
+    let seed = app.get_interactive_seed_prompt().to_string();
+    if !seed.trim().is_empty() {
+        args.extend(["--seed-prompt".into(), seed]);
+    }
     args.extend(ollama_args(app));
     for entry in split_voice_map(&app.get_speaker_voice_map().to_string()) {
         args.extend(["--voice".into(), entry]);
@@ -3047,6 +3142,33 @@ fn handle_bridge_events(
                     );
                 }
             }
+            Some("interactive_turn") => {
+                let turn = value.get("turn").and_then(Value::as_i64).unwrap_or(0);
+                let total = value.get("total").and_then(Value::as_i64).unwrap_or(0);
+                let speaker = value
+                    .get("speaker")
+                    .and_then(Value::as_str)
+                    .unwrap_or("host");
+                let text = value.get("text").and_then(Value::as_str).unwrap_or("");
+                let follow_up = value.get("follow_up").and_then(Value::as_str).unwrap_or("");
+                let line = if follow_up.is_empty() {
+                    format!("{turn}/{total} {speaker}: {text}")
+                } else {
+                    format!("{turn}/{total} {speaker}: {text}\nNext: {follow_up}")
+                };
+                append_podcast_text(weak.clone(), &line);
+            }
+            Some("interactive_podcast") => {
+                if let Some(output) = value.get("output").and_then(Value::as_str) {
+                    set_last_output(weak.clone(), output);
+                    set_guide(
+                        weak.clone(),
+                        &format!(
+                            "Interactive podcast rendered: {output}. Use Open File to play it."
+                        ),
+                    );
+                }
+            }
             Some("error") => {
                 if let Some(message) = value.get("message").and_then(Value::as_str) {
                     update_job(weak.clone(), jobs.clone(), job_id, "failed", 100, message);
@@ -3150,6 +3272,21 @@ fn set_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_podcast_text(text.into());
+        }
+    });
+}
+
+fn append_podcast_text(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            let current = app.get_podcast_text().to_string();
+            let next = if current.starts_with("Generate a script first.") {
+                text
+            } else {
+                format!("{current}\n{text}")
+            };
+            app.set_podcast_text(next.into());
         }
     });
 }
