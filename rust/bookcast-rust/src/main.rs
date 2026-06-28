@@ -52,6 +52,7 @@ export component AppWindow inherits Window {
     in-out property <string> queue-text: "Queue idle.";
     in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
+    in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
     in-out property <int> current-view: 0;
 
@@ -78,6 +79,7 @@ export component AppWindow inherits Window {
     callback sample-render();
     callback render-book();
     callback tts-test();
+    callback check-engine();
     callback suggest-characters();
     callback podcast-script();
     callback podcast-render();
@@ -205,7 +207,17 @@ export component AppWindow inherits Window {
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
-                            Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
+                            Text {
+                                text: root.engine-check-text;
+                                color: rgb(133, 82, 38);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Check Engine"; clicked => { root.check-engine(); } }
+                                Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
+                            }
 
                             HorizontalLayout {
                                 spacing: 10px;
@@ -945,9 +957,42 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    let engine_check_state = state.clone();
+    app.on_check_engine(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(problem) = engine_check_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_engine_check_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
+        if app.get_engine_index() == 2 {
+            run_bridge(
+                app.as_weak(),
+                engine_check_state.clone(),
+                "audio.cpp health",
+                audio_cpp_health_args(&app),
+            );
+        } else {
+            run_bridge(
+                app.as_weak(),
+                engine_check_state.clone(),
+                "engine check",
+                voice_args(&app),
+            );
+        }
+    });
+
+    let weak = app.as_weak();
     let voice_state = state.clone();
     app.on_discover_voices(move || {
         let Some(app) = weak.upgrade() else { return };
+        if let Some(problem) = engine_check_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_engine_check_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
         run_bridge(
             app.as_weak(),
             voice_state.clone(),
@@ -1098,13 +1143,10 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     let tts_test_state = state.clone();
     app.on_tts_test(move || {
         let Some(app) = weak.upgrade() else { return };
-        let text = app.get_tts_test_text().to_string();
-        if text.trim().is_empty() {
-            app.set_status_text("TTS test needs text.".into());
-            return;
-        }
-        if app.get_engine_index() == 2 && app.get_audio_cpp_model().to_string().trim().is_empty() {
-            app.set_status_text("audio.cpp TTS test needs a model.".into());
+        if let Some(problem) = tts_test_preflight_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_engine_check_text(problem.clone().into());
+            app.set_guide_text(problem.into());
             return;
         }
         run_bridge(
@@ -1675,6 +1717,25 @@ fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
     )
 }
 
+fn engine_check_problem(app: &AppWindow) -> Option<String> {
+    engine_check_problem_from(
+        app.get_engine_index(),
+        &app.get_piper_exe().to_string(),
+        &app.get_audio_cpp_exe().to_string(),
+        &app.get_audio_cpp_model().to_string(),
+    )
+}
+
+fn tts_test_preflight_problem(app: &AppWindow) -> Option<String> {
+    tts_test_preflight_problem_from(
+        &app.get_tts_test_text().to_string(),
+        app.get_engine_index(),
+        &app.get_piper_exe().to_string(),
+        &app.get_audio_cpp_exe().to_string(),
+        &app.get_audio_cpp_model().to_string(),
+    )
+}
+
 fn render_limit_problem(app: &AppWindow) -> Option<String> {
     let limit = app.get_render_limit().to_string();
     optional_positive_limit_problem(&limit, "Render chunk limit")
@@ -1689,6 +1750,42 @@ fn optional_positive_limit_problem(limit: &str, label: &str) -> Option<String> {
         Ok(value) if value > 0 => None,
         _ => Some(format!("{label} must be empty or a positive whole number.")),
     }
+}
+
+fn engine_check_problem_from(
+    engine_index: i32,
+    piper_exe: &str,
+    audio_cpp_exe: &str,
+    audio_cpp_model: &str,
+) -> Option<String> {
+    if engine_index == 1 && piper_exe.trim().is_empty() {
+        return Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.".to_string());
+    }
+    if engine_index == 2 {
+        if audio_cpp_exe.trim().is_empty() {
+            return Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.".to_string());
+        }
+        if audio_cpp_model.trim().is_empty() {
+            return Some(
+                "audio.cpp selected, but model is missing. Set audio.cpp model before rendering."
+                    .to_string(),
+            );
+        }
+    }
+    None
+}
+
+fn tts_test_preflight_problem_from(
+    text: &str,
+    engine_index: i32,
+    piper_exe: &str,
+    audio_cpp_exe: &str,
+    audio_cpp_model: &str,
+) -> Option<String> {
+    if text.trim().is_empty() {
+        return Some("TTS test needs text.".to_string());
+    }
+    engine_check_problem_from(engine_index, piper_exe, audio_cpp_exe, audio_cpp_model)
 }
 
 fn render_preflight_problem_from(
@@ -1708,19 +1805,10 @@ fn render_preflight_problem_from(
     ) {
         return Some("Output must be opus, mp3, wav, or m4b.".to_string());
     }
-    if engine_index == 1 && piper_exe.trim().is_empty() {
-        return Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.".to_string());
-    }
-    if engine_index == 2 {
-        if audio_cpp_exe.trim().is_empty() {
-            return Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.".to_string());
-        }
-        if audio_cpp_model.trim().is_empty() {
-            return Some(
-                "audio.cpp selected, but model is missing. Set audio.cpp model before rendering."
-                    .to_string(),
-            );
-        }
+    if let Some(problem) =
+        engine_check_problem_from(engine_index, piper_exe, audio_cpp_exe, audio_cpp_model)
+    {
+        return Some(problem);
     }
     None
 }
@@ -2199,6 +2287,15 @@ fn handle_bridge_events(
                 }
             }
             Some("voices") => {
+                let provider = value
+                    .get("provider")
+                    .and_then(Value::as_str)
+                    .unwrap_or("tts");
+                let voice_count = value
+                    .get("voices")
+                    .and_then(Value::as_array)
+                    .map(|items| items.len())
+                    .unwrap_or(0);
                 let voices = value
                     .get("voices")
                     .and_then(Value::as_array)
@@ -2232,6 +2329,10 @@ fn handle_bridge_events(
                     set_voice_name(weak.clone(), first_id);
                 }
                 set_voice_list(weak.clone(), &voices);
+                set_engine_check(
+                    weak.clone(),
+                    &format!("Engine check OK: {provider} returned {voice_count} voices."),
+                );
                 set_guide(
                     weak.clone(),
                     "Voices loaded. Voice field was filled with the first voice.",
@@ -2259,6 +2360,10 @@ fn handle_bridge_events(
                     .unwrap_or_default();
                 let hints = json_string_list(&value, "hints");
                 if healthy {
+                    set_engine_check(
+                        weak.clone(),
+                        &format!("Engine check OK: audio.cpp ready ({executable})"),
+                    );
                     set_audio_status(
                         weak.clone(),
                         &format!("audio.cpp: local config OK ({executable})"),
@@ -2282,6 +2387,7 @@ fn handle_bridge_events(
                     } else {
                         issues
                     };
+                    set_engine_check(weak.clone(), &format!("Engine check failed: {detail}"));
                     set_audio_status(weak.clone(), &format!("audio.cpp: {detail}"));
                     if hints.is_empty() {
                         set_guide(weak.clone(), &format!("Fix audio.cpp config: {detail}"));
@@ -2949,6 +3055,15 @@ fn set_audio_status(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_engine_check(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_engine_check_text(text.into());
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -2959,6 +3074,7 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::render_preflight_problem_from;
+    use super::tts_test_preflight_problem_from;
 
     #[test]
     fn render_preflight_requires_book_id() {
@@ -2982,6 +3098,30 @@ mod tests {
             render_preflight_problem_from("book-1", "opus", 2, "", "audiocpp_cli.exe", "")
                 .as_deref(),
             Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
+        );
+    }
+
+    #[test]
+    fn tts_test_preflight_reuses_engine_checks() {
+        assert_eq!(
+            tts_test_preflight_problem_from("", 0, "", "", "").as_deref(),
+            Some("TTS test needs text.")
+        );
+        assert_eq!(
+            tts_test_preflight_problem_from("hello", 1, "", "", "").as_deref(),
+            Some("Piper selected, but Piper executable is missing. Run Diagnose or set Piper executable.")
+        );
+        assert_eq!(
+            tts_test_preflight_problem_from("hello", 2, "", "", "model.bin").as_deref(),
+            Some("audio.cpp selected, but executable is missing. Build audio.cpp or set audiocpp_cli.exe.")
+        );
+        assert_eq!(
+            tts_test_preflight_problem_from("hello", 2, "", "audiocpp_cli.exe", "").as_deref(),
+            Some("audio.cpp selected, but model is missing. Set audio.cpp model before rendering.")
+        );
+        assert_eq!(
+            tts_test_preflight_problem_from("hello", 2, "", "audiocpp_cli.exe", "model.bin"),
+            None
         );
     }
 

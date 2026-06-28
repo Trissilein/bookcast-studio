@@ -61,6 +61,8 @@ inspection from each output view.
 TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
 shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.
+Use `Check Engine` before rendering; it validates the selected engine and shows
+the exact missing executable/model path when configuration is incomplete.
 TTS Studio also has a free-text TTS test that writes a WAV through the selected
 engine without needing a book.
 The Library view can load cleanup profiles and apply one to the selected book;
