@@ -161,8 +161,8 @@ recursively imports TXT, MD, EPUB, DOCX, and PDF files while skipping unrelated 
 .\.venv\Scripts\bookcast calibre import "C:\Users\you\Calibre Library" --library .\library --id 42
 ```
 
-Only `EPUB`, `TXT`, and `MD` are imported from Calibre in this slice. Books
-without those formats are skipped until conversion support lands.
+Calibre import accepts `EPUB`, `DOCX`, `TXT`, `MD`, and `PDF`, preferring better
+structured formats before falling back to PDF.
 
 ## Ollama Tools
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-SUPPORTED_IMPORT_FORMATS = ("EPUB", "TXT", "MD")
+SUPPORTED_IMPORT_FORMATS = ("EPUB", "DOCX", "TXT", "MD", "PDF")
 
 
 @dataclass(frozen=True)

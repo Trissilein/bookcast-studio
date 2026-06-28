@@ -422,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{book.id} | {book.authors} | {book.title} | {', '.join(book.formats)}")
             skipped = len(books) - len(supported)
             if skipped:
-                print(f"Skipped {skipped} books without EPUB/TXT/MD")
+                print(f"Skipped {skipped} books without EPUB/DOCX/TXT/MD/PDF")
             return 0
 
         if args.calibre_command == "import":

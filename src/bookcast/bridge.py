@@ -382,7 +382,7 @@ def calibre_import(
         wanted = {str(item).strip() for item in ids if str(item).strip()}
         books = [book for book in books if book.id in wanted]
     if not books:
-        emit("error", message="No matching Calibre books with EPUB/TXT/MD found.", error_type="NoCalibreBooks")
+        emit("error", message="No matching Calibre books with EPUB/DOCX/TXT/MD/PDF found.", error_type="NoCalibreBooks")
         return 1
 
     library = BookLibrary(library_root)

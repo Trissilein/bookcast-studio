@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
                 self.status.setText(f"Calibre scan failed: {exc}")
                 return
             if not books:
-                self.status.setText("No Calibre books with EPUB/TXT/MD found.")
+                self.status.setText("No Calibre books with EPUB/DOCX/TXT/MD/PDF found.")
                 return
 
             dialog = QDialog(self)

@@ -36,6 +36,12 @@ def test_parse_calibre_list_for_machine_json() -> None:
     ]
 
 
+def test_calibre_preferred_format_uses_existing_extractors_before_pdf() -> None:
+    book = CalibreBook(id="8", title="Mixed", authors="Ada Author", formats=("PDF", "DOCX", "TXT"))
+
+    assert book.preferred_format() == "DOCX"
+
+
 def test_calibre_import_uses_external_id_for_dedupe(tmp_path: Path) -> None:
     exported = tmp_path / "exported.epub"
     _write_epub(exported)
