@@ -89,6 +89,7 @@ export component AppWindow inherits Window {
     callback open-output-folder();
     callback refresh-audio-cpp();
     callback cancel-job();
+    callback retry-job();
 
     Rectangle {
         background: rgb(245, 242, 234);
@@ -153,6 +154,7 @@ export component AppWindow inherits Window {
                         Button { text: "Diagnose"; clicked => { root.diagnose(); } }
                         Button { text: "Refresh Books"; clicked => { root.list-books(); } }
                         Button { text: "Check audio.cpp"; clicked => { root.refresh-audio-cpp(); } }
+                        Button { text: "Retry Last"; clicked => { root.retry-job(); } }
                         Button { text: "Cancel"; clicked => { root.cancel-job(); } }
                     }
                 }
@@ -634,6 +636,11 @@ export component AppWindow inherits Window {
                         padding: 14px;
                         spacing: 8px;
                         Text { text: "Queue"; color: rgb(248, 241, 222); font-size: 18px; font-weight: 700; }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Button { text: "Retry Last"; clicked => { root.retry-job(); } }
+                            Button { text: "Cancel"; clicked => { root.cancel-job(); } }
+                        }
                         Text {
                             text: root.queue-text;
                             color: rgb(203, 216, 207);
@@ -659,9 +666,16 @@ const DEFAULT_AUDIO_CPP_EXE: &str =
 struct AppState {
     repo_root: PathBuf,
     active_pid: Arc<Mutex<Option<u32>>>,
+    last_bridge_job: Arc<Mutex<Option<BridgeJobRequest>>>,
     jobs: Arc<Mutex<Vec<JobState>>>,
     book_ids: Arc<Mutex<Vec<String>>>,
     book_index: Arc<Mutex<usize>>,
+}
+
+#[derive(Clone)]
+struct BridgeJobRequest {
+    label: &'static str,
+    args: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -706,6 +720,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let state = AppState {
         repo_root: find_repo_root(),
         active_pid: Arc::new(Mutex::new(None)),
+        last_bridge_job: Arc::new(Mutex::new(None)),
         jobs: Arc::new(Mutex::new(Vec::new())),
         book_ids: Arc::new(Mutex::new(Vec::new())),
         book_index: Arc::new(Mutex::new(0)),
@@ -1277,6 +1292,27 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    let retry_state = state.clone();
+    app.on_retry_job(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let last_job = retry_state
+            .last_bridge_job
+            .lock()
+            .expect("last bridge job lock")
+            .clone();
+        let Some(last_job) = last_job else {
+            app.set_status_text("No bridge job to retry yet.".into());
+            return;
+        };
+        run_bridge(
+            app.as_weak(),
+            retry_state.clone(),
+            last_job.label,
+            last_job.args,
+        );
+    });
+
+    let weak = app.as_weak();
     let cancel_state = state;
     app.on_cancel_job(move || {
         cancel_active_job(weak.clone(), cancel_state.active_pid.clone());
@@ -1289,6 +1325,21 @@ fn run_bridge(
     label: &'static str,
     args: Vec<String>,
 ) {
+    if state.active_pid.lock().expect("pid lock").is_some() {
+        set_status(
+            weak.clone(),
+            "Another job is running. Wait or cancel before starting a new job.",
+        );
+        push_log(
+            weak,
+            &format!("Skipped {label}: another job is already running."),
+        );
+        return;
+    }
+    *state.last_bridge_job.lock().expect("last bridge job lock") = Some(BridgeJobRequest {
+        label,
+        args: args.clone(),
+    });
     let job_id = create_job(
         weak.clone(),
         state.jobs.clone(),

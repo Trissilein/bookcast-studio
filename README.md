@@ -58,6 +58,9 @@ Output history is shown in TTS Studio, Library, and Podcast views; renders emit
 fresh output lists automatically and `Refresh Outputs` reloads them on demand.
 Rendered output can be opened as a file for playback or as a folder for manual
 inspection from each output view.
+The Rust queue runs one bridge job at a time so cancel targets the correct
+process. `Retry Last` repeats the previous bridge job after a failure or manual
+cancel.
 TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
 shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.
