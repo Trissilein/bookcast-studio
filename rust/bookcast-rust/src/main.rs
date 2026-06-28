@@ -23,6 +23,7 @@ export component AppWindow inherits Window {
     in-out property <string> source-suggested-path: "";
     in-out property <string> calibre-ids: "";
     in-out property <string> calibre-limit: "50";
+    in-out property <string> calibre-action-text: "Select a Calibre library folder, then click Diagnose Calibre.";
     in-out property <string> calibre-preview-text: "No Calibre scan yet.";
     in-out property <string> book-id: "";
     in-out property <string> voice-name: "";
@@ -459,6 +460,26 @@ export component AppWindow inherits Window {
                                 Button { text: "Browse"; clicked => { root.browse-calibre(); } }
                             }
                             Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
+                            Text {
+                                text: root.calibre-action-text;
+                                color: rgb(133, 82, 38);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                visible: root.calibre-suggested-path != "";
+                                text: "Suggested Calibre library: " + root.calibre-suggested-path;
+                                color: rgb(45, 69, 58);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                visible: root.source-suggested-path != "";
+                                text: "Raw source folder: " + root.source-suggested-path;
+                                color: rgb(45, 69, 58);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                             HorizontalLayout {
                                 visible: root.calibre-suggested-path != "" || root.source-suggested-path != "";
                                 spacing: 10px;
@@ -1033,6 +1054,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_calibre_path(path_to_string(&path).into());
             app.set_calibre_suggested_path("".into());
             app.set_source_suggested_path("".into());
+            app.set_calibre_action_text(
+                "Selected folder. Click Diagnose Calibre before scanning.".into(),
+            );
             app.set_guide_text("Calibre folder selected. Click Diagnose Calibre next.".into());
         }
     });
@@ -1050,6 +1074,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         app.set_calibre_path(suggested.into());
         app.set_calibre_suggested_path("".into());
         app.set_source_suggested_path("".into());
+        app.set_calibre_action_text(
+            "Suggested library applied. Click Diagnose Calibre again, then Scan Calibre.".into(),
+        );
         app.set_guide_text(
             "Suggested Calibre library applied. Click Diagnose Calibre again, then Scan Calibre."
                 .into(),
@@ -1069,6 +1096,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         app.set_source_path(suggested.into());
         app.set_calibre_suggested_path("".into());
         app.set_source_suggested_path("".into());
+        app.set_calibre_action_text(
+            "Raw source folder applied. Use Probe Source, then Import Source.".into(),
+        );
         app.set_guide_text(
             "Folder moved to Source import. Click Probe Source, then Import Source.".into(),
         );
@@ -1199,6 +1229,10 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let calibre = app.get_calibre_path().to_string();
         if calibre.trim().is_empty() {
             app.set_status_text("Calibre diagnose needs a library path.".into());
+            app.set_calibre_action_text(
+                "Select the folder that contains Calibre metadata.db, then Diagnose Calibre."
+                    .into(),
+            );
             return;
         }
         run_bridge(
@@ -1216,6 +1250,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let calibre = app.get_calibre_path().to_string();
         if calibre.trim().is_empty() {
             app.set_status_text("Calibre scan needs a library path.".into());
+            app.set_calibre_action_text(
+                "Select and diagnose a Calibre library before scanning.".into(),
+            );
             return;
         }
         if let Some(problem) =
@@ -1236,6 +1273,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let calibre = app.get_calibre_path().to_string();
         if calibre.trim().is_empty() {
             app.set_status_text("Calibre import needs a library path.".into());
+            app.set_calibre_action_text(
+                "Select, diagnose, and scan a Calibre library before importing.".into(),
+            );
             return;
         }
         if let Some(problem) =
@@ -1248,6 +1288,9 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if ids.is_empty() {
             app.set_status_text("Calibre import needs IDs. Run Scan Calibre, then remove IDs you do not want.".into());
             app.set_guide_text("Scan Calibre fills Calibre IDs with the visible importable books. Edit that field, then import.".into());
+            app.set_calibre_action_text(
+                "Run Scan Calibre first. It fills IDs for visible importable books.".into(),
+            );
             return;
         }
         let mut args = vec![
@@ -3009,6 +3052,39 @@ fn calibre_suggested_path(suggested: &str, candidates: &[String]) -> String {
     candidates.first().cloned().unwrap_or_default()
 }
 
+fn calibre_action_text(
+    healthy: bool,
+    candidate_suggestion: &str,
+    source_suggestion: &str,
+    first_issue: &str,
+) -> String {
+    if healthy {
+        return "Calibre looks valid. Next: Scan Calibre, review IDs, then Import Calibre IDs."
+            .to_string();
+    }
+    if !candidate_suggestion.trim().is_empty() {
+        return "Calibre metadata found elsewhere. Next: Use suggested Calibre, then Diagnose Calibre again.".to_string();
+    }
+    if !source_suggestion.trim().is_empty() {
+        return "This is not a Calibre library, but supported books were found. Next: Use as Source Folder, Probe Source, then Import Source.".to_string();
+    }
+    if first_issue.contains("calibredb not found") {
+        return "Calibre CLI missing. Install Calibre or add calibredb.exe to PATH, then Diagnose Calibre again.".to_string();
+    }
+    if first_issue.contains("metadata.db not found") {
+        return "Wrong folder. Choose the Calibre library root, the folder containing metadata.db."
+            .to_string();
+    }
+    format!(
+        "Calibre needs attention: {}",
+        if first_issue.trim().is_empty() {
+            "run Diagnose Calibre and follow the issue list."
+        } else {
+            first_issue
+        }
+    )
+}
+
 fn source_probe_summary(value: &Value) -> String {
     let source = value.get("source").and_then(Value::as_str).unwrap_or("");
     match value.get("kind").and_then(Value::as_str).unwrap_or("") {
@@ -3386,6 +3462,13 @@ fn handle_bridge_events(
                 let source_candidates = source_candidate_paths.join("\n");
                 let issues = json_string_list(&value, "issues");
                 let hints = json_string_list(&value, "hints");
+                let first_issue = issues.lines().next().unwrap_or("");
+                let next_action = calibre_action_text(
+                    healthy,
+                    &candidate_suggestion,
+                    &source_suggestion,
+                    first_issue,
+                );
                 let detail = if healthy {
                     format!(
                         "Calibre OK\nLibrary: {library}\nmetadata.db: {metadata}\ncalibredb: {calibredb}\nSample scan: {sample_count} book(s)"
@@ -3411,19 +3494,14 @@ fn handle_bridge_events(
                     )
                 };
                 set_calibre_preview(weak.clone(), &detail);
+                set_calibre_action(weak.clone(), &next_action);
                 if healthy {
                     set_guide(
                         weak.clone(),
                         "Calibre path looks valid. Scan/import can continue.",
                     );
                 } else {
-                    set_guide(
-                        weak.clone(),
-                        &format!(
-                            "Fix Calibre setup: {}",
-                            issues.lines().next().unwrap_or("unknown issue")
-                        ),
-                    );
+                    set_guide(weak.clone(), &format!("Fix Calibre setup: {}", next_action));
                 }
             }
             Some("source_probe") => {
@@ -3778,6 +3856,10 @@ fn handle_bridge_events(
                     weak.clone(),
                     &format!("Calibre scan found {count} importable books, skipped {skipped}. Calibre IDs now contains visible books; remove IDs you do not want, then import."),
                 );
+                set_calibre_action(
+                    weak.clone(),
+                    "Scan complete. Next: review Calibre IDs, then click Import Calibre IDs.",
+                );
             }
             Some("calibre_imported") => {
                 let title = value.get("title").and_then(Value::as_str).unwrap_or("");
@@ -3789,6 +3871,10 @@ fn handle_bridge_events(
                 set_guide(
                     weak.clone(),
                     &format!("Imported from Calibre: {title}. Book id filled for render."),
+                );
+                set_calibre_action(
+                    weak.clone(),
+                    "Import complete. Next: open Library to inspect chapters, or TTS Studio to render a sample.",
                 );
             }
             Some("characters") => {
@@ -4195,6 +4281,15 @@ fn set_source_suggested_path(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_calibre_action(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_calibre_action_text(text.into());
+        }
+    });
+}
+
 fn set_source_probe(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let _ = slint::invoke_from_event_loop(move || {
@@ -4260,6 +4355,7 @@ mod tests {
     use serde_json::json;
 
     use super::audio_cpp_update_status;
+    use super::calibre_action_text;
     use super::calibre_suggested_path;
     use super::confirmed_voice_entries_from;
     use super::job_progress_detail;
@@ -4511,6 +4607,26 @@ mod tests {
         );
         assert_eq!(calibre_suggested_path("", &candidates), candidates[0]);
         assert_eq!(calibre_suggested_path("", &[]), "");
+    }
+
+    #[test]
+    fn calibre_action_text_names_next_safe_action() {
+        assert!(calibre_action_text(true, "", "", "").contains("Scan Calibre"));
+        assert!(
+            calibre_action_text(false, "D:\\Calibre", "", "metadata.db not found")
+                .contains("Use suggested Calibre")
+        );
+        assert!(
+            calibre_action_text(false, "", "D:\\Books", "metadata.db not found")
+                .contains("Use as Source Folder")
+        );
+        assert!(
+            calibre_action_text(false, "", "", "calibredb not found").contains("Install Calibre")
+        );
+        assert!(
+            calibre_action_text(false, "", "", "metadata.db not found in: D:\\Books")
+                .contains("folder containing metadata.db")
+        );
     }
 
     #[test]
