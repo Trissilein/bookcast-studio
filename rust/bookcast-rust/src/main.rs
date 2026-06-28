@@ -19,6 +19,8 @@ export component AppWindow inherits Window {
     in-out property <string> source-path: "";
     in-out property <string> source-probe-text: "No source probed yet.";
     in-out property <string> calibre-path: "";
+    in-out property <string> calibre-suggested-path: "";
+    in-out property <string> source-suggested-path: "";
     in-out property <string> calibre-ids: "";
     in-out property <string> calibre-limit: "50";
     in-out property <string> calibre-preview-text: "No Calibre scan yet.";
@@ -80,6 +82,8 @@ export component AppWindow inherits Window {
     callback list-books();
     callback import-source();
     callback diagnose-calibre();
+    callback use-suggested-calibre();
+    callback use-source-suggestion();
     callback scan-calibre();
     callback import-calibre();
     callback load-preview();
@@ -388,6 +392,20 @@ export component AppWindow inherits Window {
                                 Button { text: "Browse"; clicked => { root.browse-calibre(); } }
                             }
                             Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
+                            HorizontalLayout {
+                                visible: root.calibre-suggested-path != "" || root.source-suggested-path != "";
+                                spacing: 10px;
+                                Button {
+                                    visible: root.calibre-suggested-path != "";
+                                    text: "Use suggested Calibre";
+                                    clicked => { root.use-suggested-calibre(); }
+                                }
+                                Button {
+                                    visible: root.source-suggested-path != "";
+                                    text: "Use as Source Folder";
+                                    clicked => { root.use-source-suggestion(); }
+                                }
+                            }
                             Button { text: "Scan Calibre"; clicked => { root.scan-calibre(); } }
                             Text { text: "Calibre IDs"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.calibre-ids; }
@@ -874,8 +892,47 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let Some(app) = weak.upgrade() else { return };
         if let Some(path) = choose_folder("Choose Calibre library root") {
             app.set_calibre_path(path_to_string(&path).into());
+            app.set_calibre_suggested_path("".into());
+            app.set_source_suggested_path("".into());
             app.set_guide_text("Calibre folder selected. Click Diagnose Calibre next.".into());
         }
+    });
+
+    let weak = app.as_weak();
+    app.on_use_suggested_calibre(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let suggested = app.get_calibre_suggested_path().to_string();
+        if suggested.trim().is_empty() {
+            app.set_status_text(
+                "No Calibre suggestion available. Run Diagnose Calibre first.".into(),
+            );
+            return;
+        }
+        app.set_calibre_path(suggested.into());
+        app.set_calibre_suggested_path("".into());
+        app.set_source_suggested_path("".into());
+        app.set_guide_text(
+            "Suggested Calibre library applied. Click Diagnose Calibre again, then Scan Calibre."
+                .into(),
+        );
+    });
+
+    let weak = app.as_weak();
+    app.on_use_source_suggestion(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let suggested = app.get_source_suggested_path().to_string();
+        if suggested.trim().is_empty() {
+            app.set_status_text(
+                "No source-folder suggestion available. Run Diagnose Calibre first.".into(),
+            );
+            return;
+        }
+        app.set_source_path(suggested.into());
+        app.set_calibre_suggested_path("".into());
+        app.set_source_suggested_path("".into());
+        app.set_guide_text(
+            "Folder moved to Source import. Click Probe Source, then Import Source.".into(),
+        );
     });
 
     let weak = app.as_weak();
@@ -2664,6 +2721,13 @@ fn preferred_audio_cpp_family(families: &[String]) -> Option<&str> {
         .copied()
 }
 
+fn calibre_suggested_path(suggested: &str, candidates: &[String]) -> String {
+    if !suggested.trim().is_empty() {
+        return suggested.trim().to_string();
+    }
+    candidates.first().cloned().unwrap_or_default()
+}
+
 fn source_probe_summary(value: &Value) -> String {
     let source = value.get("source").and_then(Value::as_str).unwrap_or("");
     match value.get("kind").and_then(Value::as_str).unwrap_or("") {
@@ -3027,8 +3091,18 @@ fn handle_bridge_events(
                     .get("suggested_library")
                     .and_then(Value::as_str)
                     .unwrap_or("");
-                let candidates = json_string_list(&value, "candidate_libraries");
-                let source_candidates = json_string_list(&value, "source_file_candidates");
+                let candidate_paths = json_string_vec(&value, "candidate_libraries");
+                let source_candidate_paths = json_string_vec(&value, "source_file_candidates");
+                let candidate_suggestion = calibre_suggested_path(suggested, &candidate_paths);
+                let source_suggestion = if source_candidate_paths.is_empty() {
+                    String::new()
+                } else {
+                    library.to_string()
+                };
+                set_calibre_suggested_path(weak.clone(), &candidate_suggestion);
+                set_source_suggested_path(weak.clone(), &source_suggestion);
+                let candidates = candidate_paths.join("\n");
+                let source_candidates = source_candidate_paths.join("\n");
                 let issues = json_string_list(&value, "issues");
                 let hints = json_string_list(&value, "hints");
                 let detail = if healthy {
@@ -3820,6 +3894,24 @@ fn set_calibre_ids(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_calibre_suggested_path(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_calibre_suggested_path(text.into());
+        }
+    });
+}
+
+fn set_source_suggested_path(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_source_suggested_path(text.into());
+        }
+    });
+}
+
 fn set_source_probe(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let _ = slint::invoke_from_event_loop(move || {
@@ -3885,6 +3977,7 @@ mod tests {
     use serde_json::json;
 
     use super::audio_cpp_update_status;
+    use super::calibre_suggested_path;
     use super::confirmed_voice_entries_from;
     use super::job_progress_detail;
     use super::optional_positive_limit_problem;
@@ -4059,6 +4152,17 @@ mod tests {
 
         let families = vec!["qwen3_asr".to_string(), "silero_vad".to_string()];
         assert_eq!(preferred_audio_cpp_family(&families), None);
+    }
+
+    #[test]
+    fn calibre_suggested_path_prefers_direct_suggestion_then_first_candidate() {
+        let candidates = vec!["D:\\Books\\Calibre Library".to_string()];
+        assert_eq!(
+            calibre_suggested_path("D:\\Books", &candidates),
+            "D:\\Books"
+        );
+        assert_eq!(calibre_suggested_path("", &candidates), candidates[0]);
+        assert_eq!(calibre_suggested_path("", &[]), "");
     }
 
     #[test]
