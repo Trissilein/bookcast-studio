@@ -67,7 +67,7 @@ export component AppWindow inherits Window {
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
-    in-out property <int> current-view: 0;
+    in-out property <int> current-view: 6;
 
     callback save-settings();
     callback browse-library();
@@ -131,6 +131,7 @@ export component AppWindow inherits Window {
                         font-weight: 800;
                     }
 
+                    Button { text: "Start"; clicked => { root.current-view = 6; } }
                     Button { text: "TTS Studio"; clicked => { root.current-view = 0; } }
                     Button { text: "Import"; clicked => { root.current-view = 1; } }
                     Button { text: "Library"; clicked => { root.current-view = 2; } }
@@ -181,6 +182,63 @@ export component AppWindow inherits Window {
 
                 HorizontalLayout {
                     spacing: 14px;
+
+                    Rectangle {
+                        width: 640px;
+                        visible: root.current-view == 6;
+                        background: rgb(255, 255, 255);
+                        border-color: rgb(215, 208, 191);
+                        border-width: 1px;
+                        border-radius: 6px;
+
+                        VerticalLayout {
+                            padding: 20px;
+                            spacing: 14px;
+
+                            Text { text: "Start"; font-size: 24px; font-weight: 800; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Guided path from source file or Calibre library to first audiobook sample.";
+                                color: rgb(89, 99, 93);
+                                font-size: 14px;
+                                wrap: word-wrap;
+                            }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+
+                            Text { text: "1. Check setup"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Validate Python bridge, ffmpeg, TTS fallback, and optional local engines."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            Button { text: "Run Diagnose"; clicked => { root.diagnose(); } }
+
+                            Text { text: "2. Add a book"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Import one file, one folder, or diagnose a Calibre library before scanning."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Open Import Wizard"; clicked => { root.current-view = 1; } }
+                                Button { text: "Refresh Books"; clicked => { root.list-books(); } }
+                            }
+
+                            Text { text: "3. Prepare text"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Review chapters/chunks, change cleanup profile, and fix obvious extraction problems."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            Button { text: "Open Library"; clicked => { root.current-view = 2; } }
+
+                            Text { text: "4. Render audio"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text { text: "Pick engine, check it, render a short sample, then queue the full book."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Open TTS Studio"; clicked => { root.current-view = 0; } }
+                                Button { text: "Check Engine"; clicked => { root.check-engine(); } }
+                            }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Current checklist"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: root.setup-checklist-text;
+                                color: rgb(45, 69, 58);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
 
                     Rectangle {
                         width: 640px;
