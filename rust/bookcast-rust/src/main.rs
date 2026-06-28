@@ -67,6 +67,7 @@ export component AppWindow inherits Window {
     in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
+    in-out property <string> engine-setup-text: "Engine setup: choose an engine, then click Check Engine.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
     in-out property <int> current-view: 6;
 
@@ -291,6 +292,12 @@ export component AppWindow inherits Window {
                             Text {
                                 text: root.engine-check-text;
                                 color: rgb(133, 82, 38);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.engine-setup-text;
+                                color: rgb(70, 80, 74);
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
@@ -846,6 +853,13 @@ export component AppWindow inherits Window {
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
+                            Text { text: "Engine setup"; color: rgb(89, 99, 93); font-size: 13px; }
+                            Text {
+                                text: root.engine-setup-text;
+                                color: rgb(32, 36, 31);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
                             Text { text: "Guidance"; color: rgb(89, 99, 93); font-size: 13px; }
                             Text {
@@ -1109,6 +1123,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let Some(app) = weak.upgrade() else { return };
         if let Some(path) = choose_file("Choose piper executable", &[("Executable", &["exe"])]) {
             app.set_piper_exe(path_to_string(&path).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_status_text("Piper executable selected.".into());
         }
     });
@@ -1118,6 +1133,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         let Some(app) = weak.upgrade() else { return };
         if let Some(path) = choose_folder("Choose Piper voices folder") {
             app.set_piper_voice_dir(path_to_string(&path).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_status_text("Piper voices folder selected.".into());
         }
     });
@@ -1128,6 +1144,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if let Some(path) = choose_file("Choose audio.cpp executable", &[("Executable", &["exe"])])
         {
             app.set_audio_cpp_exe(path_to_string(&path).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_status_text("audio.cpp executable selected.".into());
         }
     });
@@ -1140,6 +1157,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             &[("Models", &["gguf", "bin", "onnx"])],
         ) {
             app.set_audio_cpp_model(path_to_string(&path).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_guide_text("audio.cpp model selected. Click Check audio.cpp next.".into());
         }
     });
@@ -1323,6 +1341,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if let Some(problem) = engine_check_problem(&app) {
             app.set_status_text(problem.clone().into());
             app.set_engine_check_text(problem.clone().into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_guide_text(problem.into());
             return;
         }
@@ -1350,6 +1369,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if let Some(problem) = engine_check_problem(&app) {
             app.set_status_text(problem.clone().into());
             app.set_engine_check_text(problem.clone().into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_guide_text(problem.into());
             return;
         }
@@ -1580,6 +1600,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if let Some(problem) = tts_test_preflight_problem(&app) {
             app.set_status_text(problem.clone().into());
             app.set_engine_check_text(problem.clone().into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_guide_text(problem.into());
             return;
         }
@@ -1600,6 +1621,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text(problem.clone().into());
             app.set_guide_text(problem.into());
             app.set_render_plan_text(render_plan_text(&app).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             return;
         }
         app.set_render_plan_text(render_plan_text(&app).into());
@@ -1616,6 +1638,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text(problem.clone().into());
             app.set_guide_text(problem.into());
             app.set_render_plan_text(render_plan_text(&app).into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
             return;
         }
         if let Some(problem) = render_limit_problem(&app) {
@@ -2859,6 +2882,7 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
             app.set_queue_summary(summary.into());
             app.set_readiness_text(readiness.into());
             app.set_setup_checklist_text(checklist.into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
         }
     });
 }
@@ -2969,6 +2993,76 @@ fn checklist_line(label: &str, done: bool) -> String {
     format!("{} {}", if done { "[x]" } else { "[ ]" }, label)
 }
 
+fn engine_setup_text(app: &AppWindow) -> String {
+    engine_setup_text_from(
+        app.get_engine_index(),
+        &app.get_piper_exe().to_string(),
+        &app.get_voice_name().to_string(),
+        &app.get_audio_cpp_exe().to_string(),
+        &app.get_audio_cpp_model().to_string(),
+        &app.get_audio_cpp_backend().to_string(),
+        &app.get_audio_cpp_family().to_string(),
+        &app.get_engine_check_text().to_string(),
+    )
+}
+
+fn engine_setup_text_from(
+    engine_index: i32,
+    piper_exe: &str,
+    voice: &str,
+    audio_cpp_exe: &str,
+    audio_cpp_model: &str,
+    audio_cpp_backend: &str,
+    audio_cpp_family: &str,
+    engine_check: &str,
+) -> String {
+    match engine_index {
+        1 => [
+            "Piper setup".to_string(),
+            checklist_line("Executable selected", !piper_exe.trim().is_empty()),
+            checklist_line(
+                "Executable exists",
+                path_like_file_problem("Piper executable", piper_exe).is_none()
+                    && !piper_exe.trim().is_empty(),
+            ),
+            checklist_line("Voice/model selected", !voice.trim().is_empty()),
+            checklist_line("Engine check passed", engine_check.contains("OK")),
+            "Next: Check Engine, render TTS Test, then Render Sample.".to_string(),
+        ]
+        .join("\n"),
+        2 => [
+            "audio.cpp setup".to_string(),
+            checklist_line("Executable selected", !audio_cpp_exe.trim().is_empty()),
+            checklist_line(
+                "Executable exists",
+                path_like_file_problem("audio.cpp executable", audio_cpp_exe).is_none()
+                    && !audio_cpp_exe.trim().is_empty(),
+            ),
+            checklist_line("Model configured", !audio_cpp_model.trim().is_empty()),
+            checklist_line(
+                "Model path exists or model name used",
+                path_like_file_problem("audio.cpp model", audio_cpp_model).is_none()
+                    && !audio_cpp_model.trim().is_empty(),
+            ),
+            checklist_line("Backend set", !audio_cpp_backend.trim().is_empty()),
+            checklist_line("Family set", !audio_cpp_family.trim().is_empty()),
+            checklist_line(
+                "Engine check passed",
+                engine_check.contains("audio.cpp ready"),
+            ),
+            "Next: Check audio.cpp, render TTS Test, then Render Sample.".to_string(),
+        ]
+        .join("\n"),
+        _ => [
+            "Windows SAPI setup".to_string(),
+            checklist_line("No path needed", true),
+            checklist_line("Engine check passed", engine_check.contains("OK")),
+            "Next: Check Engine or render TTS Test, then Render Sample.".to_string(),
+        ]
+        .join("\n"),
+    }
+}
+
 fn refresh_readiness(weak: slint::Weak<AppWindow>) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
@@ -2990,6 +3084,7 @@ fn refresh_readiness(weak: slint::Weak<AppWindow>) {
             );
             app.set_readiness_text(readiness.into());
             app.set_setup_checklist_text(checklist.into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
         }
     });
 }
@@ -4343,6 +4438,7 @@ fn set_engine_check(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_engine_check_text(text.into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
         }
     });
     refresh_readiness(refresh_weak);
@@ -4358,6 +4454,7 @@ mod tests {
     use super::calibre_action_text;
     use super::calibre_suggested_path;
     use super::confirmed_voice_entries_from;
+    use super::engine_setup_text_from;
     use super::job_progress_detail;
     use super::job_queue_line;
     use super::optional_positive_limit_problem;
@@ -4806,5 +4903,42 @@ mod tests {
         assert!(blocked.contains("[ ] Engine checked"));
         assert!(blocked.contains("[ ] Sample or output rendered"));
         assert!(blocked.contains("[ ] Queue healthy"));
+    }
+
+    #[test]
+    fn engine_setup_text_explains_selected_provider_requirements() {
+        let sapi = engine_setup_text_from(
+            0,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Engine check OK: windows_sapi returned 1 voices.",
+        );
+        assert!(sapi.contains("Windows SAPI setup"));
+        assert!(sapi.contains("[x] No path needed"));
+
+        let piper =
+            engine_setup_text_from(1, "piper.exe", "", "", "", "", "", "Engine check: not run");
+        assert!(piper.contains("Piper setup"));
+        assert!(piper.contains("[x] Executable selected"));
+        assert!(piper.contains("[ ] Voice/model selected"));
+
+        let audio_cpp = engine_setup_text_from(
+            2,
+            "",
+            "",
+            "audiocpp_cli.exe",
+            "qwen3-tts.gguf",
+            "cpu",
+            "qwen3_tts",
+            "Engine check OK: audio.cpp ready",
+        );
+        assert!(audio_cpp.contains("audio.cpp setup"));
+        assert!(audio_cpp.contains("[x] Backend set"));
+        assert!(audio_cpp.contains("[x] Family set"));
+        assert!(audio_cpp.contains("[x] Engine check passed"));
     }
 }
