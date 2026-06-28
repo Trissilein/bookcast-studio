@@ -17,6 +17,7 @@ export component AppWindow inherits Window {
 
     in-out property <string> library-path: "library";
     in-out property <string> source-path: "";
+    in-out property <string> source-probe-text: "No source probed yet.";
     in-out property <string> calibre-path: "";
     in-out property <string> calibre-ids: "";
     in-out property <string> calibre-limit: "50";
@@ -60,6 +61,7 @@ export component AppWindow inherits Window {
     callback browse-library();
     callback browse-source-file();
     callback browse-source-folder();
+    callback probe-source();
     callback browse-calibre();
     callback browse-piper-exe();
     callback browse-piper-voice-dir();
@@ -340,6 +342,13 @@ export component AppWindow inherits Window {
                                 LineEdit { text <=> root.source-path; }
                                 Button { text: "File"; clicked => { root.browse-source-file(); } }
                                 Button { text: "Folder"; clicked => { root.browse-source-folder(); } }
+                            }
+                            Button { text: "Probe Source"; clicked => { root.probe-source(); } }
+                            Text {
+                                text: root.source-probe-text;
+                                color: rgb(70, 80, 74);
+                                font-size: 13px;
+                                wrap: word-wrap;
                             }
                             Text { text: "Cleanup profile for import"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
@@ -869,6 +878,23 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
                 library,
                 "--preview-first".into(),
             ],
+        );
+    });
+
+    let weak = app.as_weak();
+    let source_probe_state = state.clone();
+    app.on_probe_source(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let source = app.get_source_path().to_string();
+        if source.trim().is_empty() {
+            app.set_status_text("Source probe needs a source path.".into());
+            return;
+        }
+        run_bridge(
+            app.as_weak(),
+            source_probe_state.clone(),
+            "source probe",
+            vec!["bridge".into(), "source-probe".into(), source],
         );
     });
 
@@ -2263,6 +2289,81 @@ fn json_string_list(value: &Value, key: &str) -> String {
         .unwrap_or_default()
 }
 
+fn source_probe_summary(value: &Value) -> String {
+    let source = value.get("source").and_then(Value::as_str).unwrap_or("");
+    match value.get("kind").and_then(Value::as_str).unwrap_or("") {
+        "folder" => {
+            let count = value
+                .get("supported_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            let files = value
+                .get("files")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .take(20)
+                        .map(|file| {
+                            let format = file.get("format").and_then(Value::as_str).unwrap_or("");
+                            let name = file.get("name").and_then(Value::as_str).unwrap_or("");
+                            format!("{format} | {name}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .filter(|text| !text.is_empty())
+                .unwrap_or_else(|| "No supported files listed.".to_string());
+            let truncated = value
+                .get("truncated")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let tail = if truncated {
+                "\n\nMore files exist; import will include all supported files."
+            } else {
+                ""
+            };
+            format!("Folder source\n{source}\n\nSupported files: {count}\n{files}{tail}")
+        }
+        _ => {
+            let title = value.get("title").and_then(Value::as_str).unwrap_or("");
+            let author = value.get("author").and_then(Value::as_str).unwrap_or("");
+            let format = value.get("format").and_then(Value::as_str).unwrap_or("");
+            let language = value
+                .get("language")
+                .and_then(Value::as_str)
+                .filter(|item| !item.is_empty())
+                .unwrap_or("unknown");
+            let chars = value.get("chars").and_then(Value::as_i64).unwrap_or(0);
+            let chapter_count = value
+                .get("chapter_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            let chapters = value
+                .get("chapters")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .take(12)
+                        .map(|chapter| {
+                            let index = chapter.get("index").and_then(Value::as_i64).unwrap_or(0);
+                            let title = chapter.get("title").and_then(Value::as_str).unwrap_or("");
+                            let chars = chapter.get("chars").and_then(Value::as_i64).unwrap_or(0);
+                            format!("{index}: {title} ({chars} chars)")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default();
+            let preview = value.get("preview").and_then(Value::as_str).unwrap_or("");
+            format!(
+                "File source\n{source}\n\n{author} - {title}\nFormat: {format}, language: {language}, chars: {chars}, chapters: {chapter_count}\n\nChapters\n{chapters}\n\nPreview\n{preview}"
+            )
+        }
+    }
+}
+
 fn job_progress_detail(value: &Value) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
@@ -2561,6 +2662,22 @@ fn handle_bridge_events(
                         ),
                     );
                 }
+            }
+            Some("source_probe") => {
+                let kind = value
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .unwrap_or("source");
+                let summary = source_probe_summary(&value);
+                set_source_probe(weak.clone(), &summary);
+                set_guide(
+                    weak.clone(),
+                    if kind == "folder" {
+                        "Source folder probed. Review supported files, then Import Source."
+                    } else {
+                        "Source file probed. Review metadata and chapter sizes, then Import Source."
+                    },
+                );
             }
             Some("outputs") => {
                 let outputs_text = value
@@ -3129,6 +3246,15 @@ fn set_calibre_ids(weak: slint::Weak<AppWindow>, text: &str) {
     });
 }
 
+fn set_source_probe(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_source_probe_text(text.into());
+        }
+    });
+}
+
 fn set_calibre_preview(weak: slint::Weak<AppWindow>, text: &str) {
     let text = text.to_string();
     let _ = slint::invoke_from_event_loop(move || {
@@ -3167,6 +3293,7 @@ mod tests {
     use super::optional_positive_limit_problem;
     use super::output_open_target;
     use super::render_preflight_problem_from;
+    use super::source_probe_summary;
     use super::split_ids;
     use super::tts_test_preflight_problem_from;
 
@@ -3273,6 +3400,35 @@ mod tests {
             audio_cpp_update_status(pinned, remote),
             "audio.cpp: Update Available, pinned aaaaaaaaaaaa remote 111111111111"
         );
+    }
+
+    #[test]
+    fn source_probe_summary_formats_file_and_folder() {
+        let file = source_probe_summary(&json!({
+            "kind": "file",
+            "source": "book.md",
+            "format": "md",
+            "title": "Book",
+            "author": "Ada",
+            "language": "en",
+            "chars": 42,
+            "chapter_count": 1,
+            "chapters": [{"index": 0, "title": "Start", "chars": 42}],
+            "preview": "Hello"
+        }));
+        assert!(file.contains("Ada - Book"));
+        assert!(file.contains("0: Start (42 chars)"));
+
+        let folder = source_probe_summary(&json!({
+            "kind": "folder",
+            "source": "sources",
+            "supported_count": 2,
+            "files": [{"format": "txt", "name": "One.txt"}],
+            "truncated": true
+        }));
+        assert!(folder.contains("Supported files: 2"));
+        assert!(folder.contains("txt | One.txt"));
+        assert!(folder.contains("More files exist"));
     }
 
     #[test]

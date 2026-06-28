@@ -197,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
     bridge_import.add_argument("--library", type=Path, required=True)
     bridge_import.add_argument("--cleanup-profile", default="standard")
 
+    bridge_source_probe = bridge_sub.add_parser("source-probe", help="Probe a source file or folder before import")
+    bridge_source_probe.add_argument("source", type=Path)
+    bridge_source_probe.add_argument("--max-chars", type=int, default=1400)
+
     bridge_calibre = bridge_sub.add_parser("calibre-scan", help="Scan Calibre and emit JSONL results")
     bridge_calibre.add_argument("calibre_library", type=Path)
     bridge_calibre.add_argument("--calibredb", default=None)
@@ -337,6 +341,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.bridge_command == "import":
             return bridge.run_safely(bridge.import_file, args.library, args.file, args.cleanup_profile)
+        if args.bridge_command == "source-probe":
+            return bridge.run_safely(bridge.source_probe, args.source, args.max_chars)
         if args.bridge_command == "calibre-scan":
             return bridge.run_safely(bridge.calibre_scan, args.calibre_library, args.calibredb, args.limit)
         if args.bridge_command == "calibre-diagnose":

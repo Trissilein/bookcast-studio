@@ -9,7 +9,7 @@ from typing import Any
 
 from .calibre import CalibreClient, diagnose_calibre_library, find_calibredb
 from .characters import suggest_characters as generate_character_suggestions
-from .importers import SUPPORTED_EXTENSIONS
+from .importers import SUPPORTED_EXTENSIONS, extract
 from .library import BookLibrary
 from .llm import OllamaProvider
 from .podcast import generate_podcast_script
@@ -334,6 +334,48 @@ def import_file(library_root: Path, source: Path, cleanup_profile: str = "standa
         emit("book_preview", **_book_preview_payload(library, str(first["book_id"])))
     finally:
         library.close()
+    return 0
+
+
+def source_probe(source: Path, max_chars: int = 1400) -> int:
+    source = Path(source)
+    sources = _source_files(source)
+    if source.is_dir():
+        emit(
+            "source_probe",
+            source=str(source),
+            kind="folder",
+            supported_count=len(sources),
+            files=[
+                {
+                    "path": str(path),
+                    "name": path.name,
+                    "format": path.suffix.lower().lstrip("."),
+                }
+                for path in sources[:20]
+            ],
+            truncated=len(sources) > 20,
+        )
+        return 0
+
+    document = extract(sources[0])
+    chapters = [
+        {"index": chapter.index, "title": chapter.title, "chars": len(chapter.text)}
+        for chapter in document.chapters
+    ]
+    emit(
+        "source_probe",
+        source=str(source),
+        kind="file",
+        format=source.suffix.lower().lstrip("."),
+        title=document.metadata.title,
+        author=document.metadata.author,
+        language=document.metadata.language or "",
+        chapter_count=len(document.chapters),
+        chars=len(document.raw_text),
+        chapters=chapters[:20],
+        preview=document.raw_text[:max_chars],
+    )
     return 0
 
 

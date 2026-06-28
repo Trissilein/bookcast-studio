@@ -65,6 +65,45 @@ def test_bridge_import_folder_imports_supported_files(tmp_path: Path, capsys) ->
     assert events[-1]["event"] == "book_preview"
 
 
+def test_bridge_source_probe_file_and_folder(tmp_path: Path, capsys) -> None:
+    source = tmp_path / "Ada Author - Probe Book.md"
+    source.write_text("# Probe Book\n\nPreview body.", encoding="utf-8")
+    folder = tmp_path / "sources"
+    folder.mkdir()
+    (folder / "Ada Author - One.txt").write_text("One.", encoding="utf-8")
+    (folder / "skip.jpg").write_bytes(b"skip")
+    expected_text = "# Probe Book\n\nPreview body."
+
+    result = main(["bridge", "source-probe", str(source)])
+    file_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert file_events == [
+        {
+            "event": "source_probe",
+            "source": str(source),
+            "kind": "file",
+            "format": "md",
+            "title": "Probe Book",
+            "author": "Ada Author",
+            "language": "",
+            "chapter_count": 1,
+            "chars": len(expected_text),
+            "chapters": [{"index": 0, "title": "Probe Book", "chars": len(expected_text)}],
+            "preview": expected_text,
+        }
+    ]
+
+    result = main(["bridge", "source-probe", str(folder)])
+    folder_events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert folder_events[0]["event"] == "source_probe"
+    assert folder_events[0]["kind"] == "folder"
+    assert folder_events[0]["supported_count"] == 1
+    assert folder_events[0]["files"][0]["name"] == "Ada Author - One.txt"
+
+
 def test_bridge_cleanup_profiles_and_rechunk(tmp_path: Path, capsys) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Cleanup Book.txt"

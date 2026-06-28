@@ -76,6 +76,8 @@ After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
 The Import Wizard uses the selected cleanup profile for both local and Calibre
 imports, so chunking can be chosen before text enters the library.
+Use `Probe Source` before local import to inspect metadata, chapter sizes, and
+the first text preview without writing anything into the library.
 Book previews now show chapter summaries plus the first chunk hashes, lengths,
 statuses, and text excerpts, which makes cleanup/chunking verifiable before TTS.
 Full renders can be limited to the first N chunks from TTS Studio for controlled
@@ -112,6 +114,7 @@ Fast smoke without packaging:
 .\.venv\Scripts\bookcast bridge voices --provider piper --piper-exe D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe --piper-voice-dir D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices
 .\.venv\Scripts\bookcast bridge tts-test --library .\library --text "Engine smoke test."
 .\.venv\Scripts\bookcast bridge audio-cpp-health --audio-cpp-model D:\path\to\model
+.\.venv\Scripts\bookcast bridge source-probe .\samples\book.epub
 .\.venv\Scripts\bookcast bridge book-preview <book-id> --library .\library
 .\.venv\Scripts\bookcast bridge cleanup-profiles --library .\library
 .\.venv\Scripts\bookcast bridge set-cleanup-profile <book-id> --library .\library --cleanup-profile standard
