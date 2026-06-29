@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 53 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: Python unit suite passed on 2026-06-29 with 54 tests and Rust unit suite with 28 tests; full readiness last passed with 53 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -55,7 +55,8 @@ Status: Mostly done.
 - Stable chunk hashes exist.
 - Chapter title/text editing and rechunking exist in the Rust Library view.
 - Golden generated EPUB tests cover German and English metadata, language, spine order, headings, and entity decoding.
-- Remaining: messy PDF golden tests and better chapter detection heuristics for problematic books.
+- Golden generated messy PDF tests cover page extraction, filename metadata, whitespace cleanup, and hyphenated line joining.
+- Remaining: better chapter detection heuristics for problematic books.
 
 ## M3 Audiobook Render
 

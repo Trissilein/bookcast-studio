@@ -48,6 +48,27 @@ def test_pdf_extract(tmp_path: Path) -> None:
     assert "Hello PDF" in document.raw_text
 
 
+def test_golden_messy_pdf_extracts_pages_and_cleans_text(tmp_path: Path) -> None:
+    source = tmp_path / "Paper Lab - Messy Pdf.pdf"
+    _write_pdf_pages(
+        source,
+        [
+            ["Chapter 1   Overview", "This   page has    weird spacing.", "hyphen-", "ated line after extraction."],
+            ["Chapter 2 Notes", "Second    page text."],
+        ],
+    )
+
+    document = extract(source)
+
+    assert document.metadata.title == "Messy Pdf"
+    assert document.metadata.author == "Paper Lab"
+    assert [chapter.title for chapter in document.chapters] == ["Page 1", "Page 2"]
+    assert "Chapter 1 Overview" in document.raw_text
+    assert "This page has weird spacing." in document.raw_text
+    assert "hyphenated line after extraction." in document.raw_text
+    assert "Second page text." in document.raw_text
+
+
 def test_epub_extracts_metadata_and_chapters(tmp_path: Path) -> None:
     source = tmp_path / "sample.epub"
     _write_epub(
@@ -169,14 +190,28 @@ def _write_docx(path: Path, paragraphs: list[str]) -> None:
 
 
 def _write_pdf(path: Path, text: str) -> None:
-    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    _write_pdf_pages(path, [[text]])
+
+
+def _write_pdf_pages(path: Path, pages: list[list[str]]) -> None:
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        f"<< /Type /Pages /Kids [{' '.join(f'{4 + index * 2} 0 R' for index in range(len(pages)))}] /Count {len(pages)} >>".encode(
+            "ascii"
+        ),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        f"<< /Length {len(f'BT /F1 24 Tf 72 720 Td ({escaped}) Tj ET'.encode('ascii'))} >>\nstream\nBT /F1 24 Tf 72 720 Td ({escaped}) Tj ET\nendstream".encode("ascii"),
     ]
+    for index, lines in enumerate(pages):
+        page_obj = 4 + index * 2
+        content_obj = page_obj + 1
+        stream = _pdf_text_stream(lines)
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {content_obj} 0 R >>".encode(
+                "ascii"
+            )
+        )
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream")
+
     parts = [b"%PDF-1.4\n"]
     offsets = [0]
     for index, obj in enumerate(objects, start=1):
@@ -190,3 +225,17 @@ def _write_pdf(path: Path, text: str) -> None:
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
     )
     path.write_bytes(b"".join(parts))
+
+
+def _pdf_text_stream(lines: list[str]) -> bytes:
+    commands = ["BT /F1 24 Tf 72 720 Td"]
+    for index, line in enumerate(lines):
+        if index:
+            commands.append("0 -32 Td")
+        commands.append(f"({_pdf_escape(line)}) Tj")
+    commands.append("ET")
+    return " ".join(commands).encode("ascii")
+
+
+def _pdf_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
