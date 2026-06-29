@@ -3787,6 +3787,30 @@ fn podcast_script_preview_text(script: &Value) -> String {
     format!("{title}\nSpeakers: {speakers}\n\n{summary}{citations}\n\n{turns}")
 }
 
+fn import_done_detail(value: &Value) -> Option<String> {
+    if value.get("job").and_then(Value::as_str) != Some("import") {
+        return None;
+    }
+    let imported = value.get("imported")?.as_array()?;
+    let duplicates = imported
+        .iter()
+        .filter(|item| {
+            item.get("duplicate")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .count();
+    let total = imported.len();
+    let new_count = total.saturating_sub(duplicates);
+    if duplicates == 0 {
+        Some(format!("Import done: {new_count} new book(s)"))
+    } else {
+        Some(format!(
+            "Import done: {new_count} new, {duplicates} duplicate(s) reused"
+        ))
+    }
+}
+
 fn job_progress_detail(value: &Value) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
@@ -3849,19 +3873,30 @@ fn handle_bridge_events(
                 );
             }
             Some("job_done") => {
-                let detail = value
-                    .get("output")
-                    .and_then(Value::as_str)
-                    .or_else(|| value.get("book_id").and_then(Value::as_str))
-                    .unwrap_or("Done");
-                update_job(weak.clone(), jobs.clone(), job_id, "done", 100, detail);
+                let detail = import_done_detail(&value).unwrap_or_else(|| {
+                    value
+                        .get("output")
+                        .and_then(Value::as_str)
+                        .or_else(|| value.get("book_id").and_then(Value::as_str))
+                        .unwrap_or("Done")
+                        .to_string()
+                });
+                update_job(weak.clone(), jobs.clone(), job_id, "done", 100, &detail);
                 if let Some(book_id) = value.get("book_id").and_then(Value::as_str) {
                     set_book_id(weak.clone(), book_id);
                     set_current_view(weak.clone(), 0);
-                    set_guide(
-                        weak.clone(),
-                        "Import finished. Preview loads automatically. Render a sample next.",
-                    );
+                    let guide = if value.get("job").and_then(Value::as_str) == Some("import") {
+                        import_done_detail(&value)
+                            .map(|summary| {
+                                format!("{summary}. Preview loads automatically. Render a sample next.")
+                            })
+                            .unwrap_or_else(|| {
+                                "Import finished. Preview loads automatically. Render a sample next.".to_string()
+                            })
+                    } else {
+                        "Import finished. Preview loads automatically. Render a sample next.".to_string()
+                    };
+                    set_guide(weak.clone(), &guide);
                 }
                 if let Some(output) = value.get("output").and_then(Value::as_str) {
                     set_last_output(weak.clone(), output);
@@ -4987,6 +5022,7 @@ mod tests {
     use super::character_voice_template;
     use super::confirmed_voice_entries_from;
     use super::engine_setup_text_from;
+    use super::import_done_detail;
     use super::job_progress_detail;
     use super::job_queue_line;
     use super::optional_positive_limit_problem;
@@ -5409,6 +5445,33 @@ mod tests {
             job_progress_detail(&json!({"phase":"tts","chunk":2,"total":5,"cached":false})),
             "tts 2/5 rendered"
         );
+    }
+
+    #[test]
+    fn import_done_detail_counts_duplicate_reuse() {
+        assert_eq!(
+            import_done_detail(&json!({
+                "job": "import",
+                "imported": [
+                    {"duplicate": false},
+                    {"duplicate": true}
+                ]
+            }))
+            .as_deref(),
+            Some("Import done: 1 new, 1 duplicate(s) reused")
+        );
+        assert_eq!(
+            import_done_detail(&json!({
+                "job": "import",
+                "imported": [
+                    {"duplicate": false},
+                    {"duplicate": false}
+                ]
+            }))
+            .as_deref(),
+            Some("Import done: 2 new book(s)")
+        );
+        assert_eq!(import_done_detail(&json!({"job": "render"})), None);
     }
 
     #[test]
