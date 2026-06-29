@@ -44,6 +44,7 @@ Status: Mostly done.
 - Calibre ID based import exists.
 - Diagnostics explain wrong folder, missing `metadata.db`, missing `calibredb`, and unreadable/locked library cases.
 - Wizard can suggest nested/parent library folders and source-folder fallback.
+- Rust Calibre wizard can browse and persist a custom `calibredb.exe` path when Calibre is not in PATH.
 - Remaining: validate against the user's real Calibre library and improve copy around failure cases.
 
 ## M2 Text Pipeline

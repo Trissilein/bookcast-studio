@@ -19,6 +19,7 @@ export component AppWindow inherits Window {
     in-out property <string> source-path: "";
     in-out property <string> source-probe-text: "No source probed yet.";
     in-out property <string> calibre-path: "";
+    in-out property <string> calibredb-path: "";
     in-out property <string> calibre-suggested-path: "";
     in-out property <string> source-suggested-path: "";
     in-out property <string> calibre-ids: "";
@@ -84,6 +85,7 @@ export component AppWindow inherits Window {
     callback browse-source-folder();
     callback probe-source();
     callback browse-calibre();
+    callback browse-calibredb();
     callback browse-piper-exe();
     callback browse-piper-voice-dir();
     callback browse-audio-cpp-exe();
@@ -485,6 +487,18 @@ export component AppWindow inherits Window {
                                 LineEdit { text <=> root.calibre-path; }
                                 Button { text: "Browse"; clicked => { root.browse-calibre(); } }
                             }
+                            Text { text: "calibredb executable (optional)"; color: rgb(89, 99, 93); }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.calibredb-path; }
+                                Button { text: "Browse"; clicked => { root.browse-calibredb(); } }
+                            }
+                            Text {
+                                text: "Set this only if Calibre is installed but calibredb is not in PATH.";
+                                color: rgb(70, 80, 74);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                             Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
                             Text {
                                 text: root.calibre-action-text;
@@ -847,6 +861,12 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.render-limit; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.voice-name; }
+                            Text { text: "calibredb executable (optional)"; color: rgb(89, 99, 93); }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.calibredb-path; }
+                                Button { text: "Browse"; clicked => { root.browse-calibredb(); } }
+                            }
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -1012,6 +1032,7 @@ struct WorkbenchSettings {
     library_path: String,
     source_path: String,
     calibre_path: String,
+    calibredb_path: String,
     calibre_ids: String,
     calibre_limit: String,
     book_id: String,
@@ -1140,6 +1161,18 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
                 "Selected folder. Click Diagnose Calibre before scanning.".into(),
             );
             app.set_guide_text("Calibre folder selected. Click Diagnose Calibre next.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_calibredb(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose calibredb executable", &[("Executable", &["exe"])])
+        {
+            app.set_calibredb_path(path_to_string(&path).into());
+            app.set_status_text("calibredb executable selected.".into());
+            app.set_calibre_action_text("Click Diagnose Calibre again.".into());
+            app.set_guide_text("calibredb path selected. Diagnose Calibre can now use it.".into());
         }
     });
 
@@ -1321,11 +1354,19 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             );
             return;
         }
+        if let Some(problem) = calibredb_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_calibre_action_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
+        let mut args = vec!["bridge".into(), "calibre-diagnose".into(), calibre];
+        append_calibredb_args(&mut args, &app);
         run_bridge(
             app.as_weak(),
             calibre_diagnose_state.clone(),
             "calibre diagnose",
-            vec!["bridge".into(), "calibre-diagnose".into(), calibre],
+            args,
         );
     });
 
@@ -1347,7 +1388,14 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text(problem.into());
             return;
         }
+        if let Some(problem) = calibredb_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_calibre_action_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
         let mut args = vec!["bridge".into(), "calibre-scan".into(), calibre];
+        append_calibredb_args(&mut args, &app);
         append_calibre_limit_args(&mut args, &app);
         run_bridge(app.as_weak(), calibre_state.clone(), "calibre scan", args);
     });
@@ -1368,6 +1416,12 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             optional_positive_limit_problem(&app.get_calibre_limit().to_string(), "Calibre limit")
         {
             app.set_status_text(problem.into());
+            return;
+        }
+        if let Some(problem) = calibredb_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_calibre_action_text(problem.clone().into());
+            app.set_guide_text(problem.into());
             return;
         }
         let ids = split_ids(&app.get_calibre_ids().to_string());
@@ -1393,6 +1447,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
         if !profile.trim().is_empty() {
             args.extend(["--cleanup-profile".into(), profile]);
         }
+        append_calibredb_args(&mut args, &app);
         append_calibre_limit_args(&mut args, &app);
         run_bridge(
             app.as_weak(),
@@ -2363,6 +2418,7 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
     }
     app.set_source_path(settings.source_path.into());
     app.set_calibre_path(settings.calibre_path.into());
+    app.set_calibredb_path(settings.calibredb_path.into());
     app.set_calibre_ids(settings.calibre_ids.into());
     if !settings.calibre_limit.is_empty() {
         app.set_calibre_limit(settings.calibre_limit.into());
@@ -2427,6 +2483,7 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         library_path: app.get_library_path().to_string(),
         source_path: app.get_source_path().to_string(),
         calibre_path: app.get_calibre_path().to_string(),
+        calibredb_path: app.get_calibredb_path().to_string(),
         calibre_ids: app.get_calibre_ids().to_string(),
         calibre_limit: app.get_calibre_limit().to_string(),
         book_id: app.get_book_id().to_string(),
@@ -2598,6 +2655,14 @@ fn optional_positive_limit_problem(limit: &str, label: &str) -> Option<String> {
         Ok(value) if value > 0 => None,
         _ => Some(format!("{label} must be empty or a positive whole number.")),
     }
+}
+
+fn calibredb_path_problem(app: &AppWindow) -> Option<String> {
+    let value = app.get_calibredb_path().to_string();
+    if value.trim().is_empty() {
+        return None;
+    }
+    path_like_file_problem("calibredb executable", &value)
 }
 
 fn parse_chapter_index(value: &str) -> Result<u32, String> {
@@ -3078,6 +3143,19 @@ fn append_calibre_limit_args(args: &mut Vec<String>, app: &AppWindow) {
     let limit = app.get_calibre_limit().to_string();
     if !limit.trim().is_empty() {
         args.extend(["--limit".into(), limit.trim().to_string()]);
+    }
+}
+
+fn append_calibredb_args(args: &mut Vec<String>, app: &AppWindow) {
+    args.extend(calibredb_args_from(&app.get_calibredb_path().to_string()));
+}
+
+fn calibredb_args_from(value: &str) -> Vec<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        Vec::new()
+    } else {
+        vec!["--calibredb".to_string(), value.to_string()]
     }
 }
 
@@ -3953,7 +4031,8 @@ fn handle_bridge_events(
                                 "Import finished. Preview loads automatically. Render a sample next.".to_string()
                             })
                     } else {
-                        "Import finished. Preview loads automatically. Render a sample next.".to_string()
+                        "Import finished. Preview loads automatically. Render a sample next."
+                            .to_string()
                     };
                     set_guide(weak.clone(), &guide);
                 }
@@ -5076,6 +5155,7 @@ mod tests {
     use super::audio_cpp_update_status;
     use super::calibre_action_text;
     use super::calibre_suggested_path;
+    use super::calibredb_args_from;
     use super::character_candidate_line;
     use super::character_review_text;
     use super::character_voice_template;
@@ -5352,6 +5432,19 @@ mod tests {
         );
         assert_eq!(calibre_suggested_path("", &candidates), candidates[0]);
         assert_eq!(calibre_suggested_path("", &[]), "");
+    }
+
+    #[test]
+    fn calibredb_args_only_pass_custom_executable_when_set() {
+        assert_eq!(calibredb_args_from(""), Vec::<String>::new());
+        assert_eq!(calibredb_args_from("  "), Vec::<String>::new());
+        assert_eq!(
+            calibredb_args_from("D:\\Tools\\Calibre2\\calibredb.exe"),
+            vec![
+                "--calibredb".to_string(),
+                "D:\\Tools\\Calibre2\\calibredb.exe".to_string()
+            ]
+        );
     }
 
     #[test]
