@@ -308,6 +308,8 @@ def podcast_script(
     mode: str = "educational",
     ollama_url: str = "http://127.0.0.1:11434",
     model: str = "qwen3:8b",
+    focus: str | None = None,
+    style: str | None = None,
 ) -> int:
     emit("job_started", job="podcast_script", book_id=book_id, mode=mode, provider="ollama", model=model)
     text = _book_text(library_root, book_id)
@@ -315,7 +317,7 @@ def podcast_script(
     if not provider.health():
         raise RuntimeError(f"Ollama unavailable at {ollama_url}")
     emit("job_progress", job="podcast_script", progress=20)
-    script = generate_podcast_script(text, provider, mode=mode)
+    script = generate_podcast_script(text, provider, mode=mode, focus=focus, style=style)
     library = BookLibrary(library_root)
     try:
         path = library.save_podcast_script(book_id, script.to_dict())
@@ -346,6 +348,8 @@ def podcast_render(
     piper_voice_dir: str | None = None,
     piper_model: str | None = None,
     script_path: Path | None = None,
+    focus: str | None = None,
+    style: str | None = None,
 ) -> int:
     voice_map = _confirmed_voice_map(voice_entries or [], confirm_voices)
     emit(
@@ -366,7 +370,7 @@ def podcast_render(
         llm = OllamaProvider(model=model, base_url=ollama_url)
         if not llm.health():
             raise RuntimeError(f"Ollama unavailable at {ollama_url}")
-        script = generate_podcast_script(text, llm, mode=mode)
+        script = generate_podcast_script(text, llm, mode=mode, focus=focus, style=style)
     tts_provider = _tts_provider(
         provider,
         audio_cpp_exe=audio_cpp_exe,

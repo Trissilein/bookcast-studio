@@ -21,6 +21,7 @@ class PodcastScript:
     summary: str
     speakers: list[str]
     turns: list[PodcastTurn]
+    citations: list[str] | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -29,6 +30,7 @@ class PodcastScript:
             "summary": self.summary,
             "speakers": self.speakers,
             "turns": [{"speaker": turn.speaker, "text": turn.text} for turn in self.turns],
+            "citations": self.citations or [],
         }
 
 
@@ -46,7 +48,7 @@ def podcast_script_from_dict(data: dict[str, object], fallback_mode: str = "educ
                 text=text,
             )
         )
-    speakers = [str(speaker).strip() for speaker in data.get("speakers", []) if str(speaker).strip()]
+    speakers = _string_list(data.get("speakers", []))
     if not speakers:
         speakers = list(dict.fromkeys(turn.speaker for turn in turns)) or ["host"]
     mode = str(data.get("mode", fallback_mode)).strip() or fallback_mode
@@ -58,6 +60,7 @@ def podcast_script_from_dict(data: dict[str, object], fallback_mode: str = "educ
         summary=str(data.get("summary", "")).strip(),
         speakers=speakers,
         turns=turns,
+        citations=_string_list(data.get("citations", [])),
     )
 
 
@@ -75,7 +78,14 @@ class InteractivePodcastStep:
         }
 
 
-def generate_podcast_script(text: str, provider: LlmProvider, mode: str, max_chars: int = 16000) -> PodcastScript:
+def generate_podcast_script(
+    text: str,
+    provider: LlmProvider,
+    mode: str,
+    max_chars: int = 16000,
+    focus: str | None = None,
+    style: str | None = None,
+) -> PodcastScript:
     if mode not in PODCAST_MODES:
         raise ValueError(f"Unsupported podcast mode: {mode}")
     speaker_contract = {
@@ -83,15 +93,20 @@ def generate_podcast_script(text: str, provider: LlmProvider, mode: str, max_cha
         "controversial": "host, position_a, position_b, fact_checker",
         "interview": "host, expert, listener",
     }[mode]
+    focus_block = focus.strip() if focus else "general understanding"
+    style_block = style.strip() if style else "clear, concise, spoken audiobook podcast"
     prompt = f"""
 Create a concise podcast script from the source text.
 Mode: {mode}
 Speakers: {speaker_contract}
+Focus: {focus_block}
+Style: {style_block}
 Return JSON only:
 {{
   "title": "episode title",
   "summary": "one paragraph",
   "speakers": ["host"],
+  "citations": ["short source-backed point or quote"],
   "turns": [
     {{"speaker": "host", "text": "spoken line"}}
   ]
@@ -100,6 +115,7 @@ Return JSON only:
 Rules:
 - Keep turns short enough for TTS.
 - Do not invent facts beyond the source.
+- Add 3-6 citations as short source-backed facts or brief quotes for review.
 - Make disagreement explicit only in controversial mode.
 
 Source:
@@ -115,9 +131,16 @@ Source:
         title=str(data.get("title", "Untitled Podcast")).strip() or "Untitled Podcast",
         mode=mode,
         summary=str(data.get("summary", "")).strip(),
-        speakers=[str(speaker) for speaker in data.get("speakers", [])],
+        speakers=_string_list(data.get("speakers", [])),
         turns=turns,
+        citations=_string_list(data.get("citations", [])),
     )
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def generate_interactive_step(

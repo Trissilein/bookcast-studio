@@ -190,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_script.add_argument("--mode", choices=sorted(PODCAST_MODES), default="educational")
     bridge_podcast_script.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     bridge_podcast_script.add_argument("--model", default="qwen3:8b")
+    bridge_podcast_script.add_argument("--focus", default=None)
+    bridge_podcast_script.add_argument("--style", default=None)
 
     bridge_podcast_render = bridge_sub.add_parser("podcast-render", help="Generate and render a podcast as JSONL")
     bridge_podcast_render.add_argument("book_id")
@@ -211,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--piper-voice-dir", default=None)
     bridge_podcast_render.add_argument("--piper-model", default=None)
     bridge_podcast_render.add_argument("--script-path", type=Path, default=None)
+    bridge_podcast_render.add_argument("--focus", default=None)
+    bridge_podcast_render.add_argument("--style", default=None)
 
     bridge_podcast_interactive = bridge_sub.add_parser("podcast-interactive", help="Generate and render a non-blocking interactive podcast as JSONL")
     bridge_podcast_interactive.add_argument("book_id")
@@ -372,6 +376,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.mode,
                 args.ollama_url,
                 args.model,
+                args.focus,
+                args.style,
             )
         if args.bridge_command == "podcast-render":
             return bridge.run_safely(
@@ -395,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.piper_voice_dir,
                 args.piper_model,
                 args.script_path,
+                args.focus,
+                args.style,
             )
         if args.bridge_command == "podcast-interactive":
             return bridge.run_safely(

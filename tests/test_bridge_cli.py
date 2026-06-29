@@ -638,9 +638,12 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
             if "continuing a live podcast" in prompt:
                 speaker = "host" if len(self.calls) <= 3 else "explainer"
                 return f'{{"speaker":"{speaker}","text":"Live turn {len(self.calls)}.","follow_up":"continue"}}'
+            assert "Focus: practical tradeoffs" in prompt
+            assert "Style: concise and calm" in prompt
             return (
                 '{"title":"Engineering Cast","summary":"Short.",'
                 '"speakers":["host","explainer"],'
+                '"citations":["Careful engineering reduces rework."],'
                 '"turns":[{"speaker":"host","text":"Welcome."},{"speaker":"explainer","text":"Care helps."}]}'
             )
 
@@ -666,12 +669,25 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
     monkeypatch.setattr("bookcast.library.probe_duration", lambda path: 1.0)
 
-    result = main(["bridge", "podcast-script", book_id, "--library", str(library_root)])
+    result = main(
+        [
+            "bridge",
+            "podcast-script",
+            book_id,
+            "--library",
+            str(library_root),
+            "--focus",
+            "practical tradeoffs",
+            "--style",
+            "concise and calm",
+        ]
+    )
     script_events = _events(capsys.readouterr().out)
 
     assert result == 0
     assert script_events[2]["event"] == "podcast_script"
     assert script_events[2]["script"]["title"] == "Engineering Cast"
+    assert script_events[2]["script"]["citations"] == ["Careful engineering reduces rework."]
     assert script_events[-1]["path"].endswith("Engineering Cast.json")
     script_path = script_events[-1]["path"]
     FakeOllama.calls.clear()

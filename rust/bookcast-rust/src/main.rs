@@ -57,6 +57,8 @@ export component AppWindow inherits Window {
     in-out property <string> podcast-review-text: "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render.";
     in-out property <string> podcast-script-path: "";
     in-out property <string> podcast-script-json: "";
+    in-out property <string> podcast-focus: "";
+    in-out property <string> podcast-style: "";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
@@ -729,6 +731,17 @@ export component AppWindow inherits Window {
                                     LineEdit { text <=> root.ollama-model; }
                                 }
                             }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    Text { text: "Podcast focus"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.podcast-focus; }
+                                }
+                                VerticalLayout {
+                                    Text { text: "Podcast style"; color: rgb(89, 99, 93); }
+                                    LineEdit { text <=> root.podcast-style; }
+                                }
+                            }
                             Text { text: "Speaker voices: speaker=voice, separated by semicolon or comma"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.speaker-voice-map; }
                             CheckBox {
@@ -1013,6 +1026,8 @@ struct WorkbenchSettings {
     interactive_turns: String,
     interactive_seed_prompt: String,
     podcast_script_path: String,
+    podcast_focus: String,
+    podcast_style: String,
     podcast_mode_index: i32,
     engine_index: i32,
     current_view: i32,
@@ -1808,6 +1823,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             podcast_mode(app.get_podcast_mode_index()).into(),
         ];
         args.extend(ollama_args(&app));
+        args.extend(podcast_prompt_args(&app));
         run_bridge(app.as_weak(), script_state.clone(), "podcast script", args);
     });
 
@@ -2335,6 +2351,8 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
     }
     app.set_interactive_seed_prompt(settings.interactive_seed_prompt.into());
     app.set_podcast_script_path(settings.podcast_script_path.into());
+    app.set_podcast_focus(settings.podcast_focus.into());
+    app.set_podcast_style(settings.podcast_style.into());
     app.set_podcast_mode_index(settings.podcast_mode_index);
     let engine_index = if settings.engine_index == 1
         && (!app.get_audio_cpp_exe().to_string().is_empty()
@@ -2375,6 +2393,8 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         interactive_turns: app.get_interactive_turns().to_string(),
         interactive_seed_prompt: app.get_interactive_seed_prompt().to_string(),
         podcast_script_path: app.get_podcast_script_path().to_string(),
+        podcast_focus: app.get_podcast_focus().to_string(),
+        podcast_style: app.get_podcast_style().to_string(),
         podcast_mode_index: app.get_podcast_mode_index(),
         engine_index: app.get_engine_index(),
         current_view: app.get_current_view(),
@@ -2737,6 +2757,7 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
         app.get_output_format().to_string(),
     ];
     args.extend(ollama_args(app));
+    args.extend(podcast_prompt_args(app));
     for entry in confirmed_speaker_voice_entries(app).unwrap_or_default() {
         args.extend(["--voice".into(), entry]);
     }
@@ -2816,6 +2837,19 @@ fn podcast_interactive_args(app: &AppWindow, book_id: String) -> Vec<String> {
         if !family.trim().is_empty() {
             args.extend(["--audio-cpp-family".into(), family]);
         }
+    }
+    args
+}
+
+fn podcast_prompt_args(app: &AppWindow) -> Vec<String> {
+    let mut args = Vec::new();
+    let focus = app.get_podcast_focus().to_string();
+    if !focus.trim().is_empty() {
+        args.extend(["--focus".into(), focus]);
+    }
+    let style = app.get_podcast_style().to_string();
+    if !style.trim().is_empty() {
+        args.extend(["--style".into(), style]);
     }
     args
 }
@@ -3612,7 +3646,22 @@ fn podcast_script_preview_text(script: &Value) -> String {
                 .join("\n")
         })
         .unwrap_or_default();
-    format!("{title}\nSpeakers: {speakers}\n\n{summary}\n\n{turns}")
+    let citations = script
+        .get("citations")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .take(6)
+                .map(|item| format!("- {item}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .filter(|text| !text.is_empty())
+        .map(|text| format!("\n\nCitations\n{text}"))
+        .unwrap_or_default();
+    format!("{title}\nSpeakers: {speakers}\n\n{summary}{citations}\n\n{turns}")
 }
 
 fn job_progress_detail(value: &Value) -> String {
@@ -5170,6 +5219,7 @@ mod tests {
             "title": "Saved Cast",
             "summary": "Short.",
             "speakers": ["host", "expert"],
+            "citations": ["Source-backed point."],
             "turns": [
                 {"speaker": "host", "text": "Welcome."},
                 {"speaker": "expert", "text": "Details."}
@@ -5180,6 +5230,7 @@ mod tests {
         let preview = podcast_script_preview_text(&script);
         assert!(preview.contains("Saved Cast"));
         assert!(preview.contains("Speakers: host, expert"));
+        assert!(preview.contains("Citations\n- Source-backed point."));
         assert!(preview.contains("expert: Details."));
     }
 
