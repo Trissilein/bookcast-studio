@@ -108,6 +108,10 @@ export component AppWindow inherits Window {
     callback podcast-script();
     callback podcast-render();
     callback podcast-interactive();
+    callback browse-podcast-script();
+    callback open-podcast-script();
+    callback open-podcast-script-folder();
+    callback reload-podcast-script();
     callback discover-voices();
     callback load-outputs();
     callback open-output();
@@ -736,6 +740,13 @@ export component AppWindow inherits Window {
                             }
                             Text { text: "Reviewed script path"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.podcast-script-path; }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Browse Script"; clicked => { root.browse-podcast-script(); } }
+                                Button { text: "Reload Script"; clicked => { root.reload-podcast-script(); } }
+                                Button { text: "Open Script"; clicked => { root.open-podcast-script(); } }
+                                Button { text: "Open Folder"; clicked => { root.open-podcast-script-folder(); } }
+                            }
                             HorizontalLayout {
                                 spacing: 10px;
                                 VerticalLayout {
@@ -1489,6 +1500,45 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    app.on_browse_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose reviewed podcast script", &[("JSON", &["json"])]) {
+            let path = path_to_string(&path);
+            app.set_podcast_script_path(path.clone().into());
+            load_podcast_script_preview(&app, &path, false);
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_reload_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let path = app.get_podcast_script_path().to_string();
+        load_podcast_script_preview(&app, &path, false);
+    });
+
+    let weak = app.as_weak();
+    app.on_open_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let path = app.get_podcast_script_path().to_string();
+        if path.trim().is_empty() {
+            app.set_status_text("No podcast script path to open.".into());
+            return;
+        }
+        open_output(app.as_weak(), path, false);
+    });
+
+    let weak = app.as_weak();
+    app.on_open_podcast_script_folder(move || {
+        let Some(app) = weak.upgrade() else { return };
+        let path = app.get_podcast_script_path().to_string();
+        if path.trim().is_empty() {
+            app.set_status_text("No podcast script folder to open.".into());
+            return;
+        }
+        open_output(app.as_weak(), path, true);
+    });
+
+    let weak = app.as_weak();
     let render_state = state.clone();
     app.on_load_preview(move || {
         let Some(app) = weak.upgrade() else { return };
@@ -2088,6 +2138,30 @@ fn output_open_target(output: &str, folder: bool) -> PathBuf {
         return path.parent().map(Path::to_path_buf).unwrap_or(path);
     }
     path
+}
+
+fn load_podcast_script_preview(app: &AppWindow, path: &str, seed_voice_map: bool) {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        app.set_status_text("Podcast script path is empty.".into());
+        return;
+    }
+    let Ok(raw) = std::fs::read_to_string(trimmed) else {
+        app.set_status_text(format!("Podcast script not readable: {trimmed}").into());
+        return;
+    };
+    let Ok(script) = serde_json::from_str::<Value>(&raw) else {
+        app.set_status_text(format!("Podcast script is not valid JSON: {trimmed}").into());
+        return;
+    };
+    let speaker_template = podcast_speaker_template(&script);
+    if seed_voice_map && !speaker_template.is_empty() {
+        app.set_speaker_voice_map(speaker_template.into());
+        app.set_speaker_voices_confirmed(false);
+    }
+    app.set_podcast_text(podcast_script_preview_text(&script).into());
+    app.set_podcast_review_text(podcast_review_text(&script, Some(trimmed)).into());
+    app.set_status_text("Podcast script preview loaded.".into());
 }
 
 fn python_invocation(repo_root: &Path) -> (String, Vec<String>) {
@@ -3393,6 +3467,61 @@ fn podcast_review_text(script: &Value, saved_or_output_path: Option<&str>) -> St
     )
 }
 
+fn podcast_speaker_template(script: &Value) -> String {
+    script
+        .get("speakers")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|speaker| !speaker.trim().is_empty())
+                .map(|speaker| format!("{speaker}="))
+                .collect::<Vec<_>>()
+                .join("; ")
+        })
+        .unwrap_or_default()
+}
+
+fn podcast_script_preview_text(script: &Value) -> String {
+    let title = script
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("Untitled");
+    let summary = script.get("summary").and_then(Value::as_str).unwrap_or("");
+    let speakers = script
+        .get("speakers")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    let turns = script
+        .get("turns")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .take(12)
+                .map(|turn| {
+                    let speaker = turn
+                        .get("speaker")
+                        .and_then(Value::as_str)
+                        .unwrap_or("host");
+                    let text = turn.get("text").and_then(Value::as_str).unwrap_or("");
+                    format!("{speaker}: {text}")
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default();
+    format!("{title}\nSpeakers: {speakers}\n\n{summary}\n\n{turns}")
+}
+
 fn job_progress_detail(value: &Value) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
@@ -4145,58 +4274,8 @@ fn handle_bridge_events(
             }
             Some("podcast_script") => {
                 let script = value.get("script").unwrap_or(&Value::Null);
-                let title = script
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .unwrap_or("Untitled");
-                let summary = script.get("summary").and_then(Value::as_str).unwrap_or("");
-                let speakers = script
-                    .get("speakers")
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default();
-                let speaker_template = script
-                    .get("speakers")
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .filter(|speaker| !speaker.trim().is_empty())
-                            .map(|speaker| format!("{speaker}="))
-                            .collect::<Vec<_>>()
-                            .join("; ")
-                    })
-                    .unwrap_or_default();
-                let turns = script
-                    .get("turns")
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .take(12)
-                            .map(|turn| {
-                                let speaker = turn
-                                    .get("speaker")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("host");
-                                let text = turn.get("text").and_then(Value::as_str).unwrap_or("");
-                                format!("{speaker}: {text}")
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    })
-                    .unwrap_or_default();
-                set_podcast_text(
-                    weak.clone(),
-                    &format!("{title}\nSpeakers: {speakers}\n\n{summary}\n\n{turns}"),
-                );
+                let speaker_template = podcast_speaker_template(script);
+                set_podcast_text(weak.clone(), &podcast_script_preview_text(script));
                 if let Some(path) = value.get("path").and_then(Value::as_str) {
                     if !speaker_template.is_empty() {
                         set_speaker_voice_map(weak.clone(), &speaker_template);
@@ -4642,6 +4721,8 @@ mod tests {
     use super::output_open_target;
     use super::parse_chapter_index;
     use super::podcast_review_text;
+    use super::podcast_script_preview_text;
+    use super::podcast_speaker_template;
     use super::preferred_audio_cpp_family;
     use super::progress_bar;
     use super::queue_action;
@@ -4969,6 +5050,25 @@ mod tests {
         assert!(review.contains("Assign every speaker=voice"));
         assert!(review.contains("will reuse this reviewed script path"));
         assert!(review.contains("D:\\out\\podcast.json"));
+    }
+
+    #[test]
+    fn podcast_script_preview_and_voice_template_use_saved_json() {
+        let script = json!({
+            "title": "Saved Cast",
+            "summary": "Short.",
+            "speakers": ["host", "expert"],
+            "turns": [
+                {"speaker": "host", "text": "Welcome."},
+                {"speaker": "expert", "text": "Details."}
+            ]
+        });
+
+        assert_eq!(podcast_speaker_template(&script), "host=; expert=");
+        let preview = podcast_script_preview_text(&script);
+        assert!(preview.contains("Saved Cast"));
+        assert!(preview.contains("Speakers: host, expert"));
+        assert!(preview.contains("expert: Details."));
     }
 
     #[test]
