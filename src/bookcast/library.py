@@ -730,6 +730,7 @@ def _voice_for_text(text: str, default_voice: str | None, voice_map: dict[str, s
         return default_voice
     first_line = text.strip().splitlines()[0] if text.strip() else ""
     first_line_lower = first_line.lower()
+    sample = clean_text(text)[:500]
     for speaker, speaker_voice in voice_map.items():
         speaker = speaker.strip()
         speaker_voice = speaker_voice.strip()
@@ -738,7 +739,27 @@ def _voice_for_text(text: str, default_voice: str | None, voice_map: dict[str, s
         speaker_lower = speaker.lower()
         if first_line_lower.startswith(f"{speaker_lower}:") or first_line_lower.startswith(f"{speaker_lower} -"):
             return speaker_voice
+        if _dialogue_attributed_to(sample, speaker):
+            return speaker_voice
     return default_voice
+
+
+def _dialogue_attributed_to(text: str, speaker: str) -> bool:
+    quoted = re.search(r'["“„][^"“”„]{1,240}["”]', text)
+    if not quoted:
+        return False
+    speaker_pattern = re.escape(speaker)
+    verbs = (
+        "said|asked|replied|whispered|called|cried|answered|"
+        "sagte|fragte|antwortete|flüsterte|flusterte|rief|meinte"
+    )
+    after_quote = text[quoted.end() : quoted.end() + 120]
+    before_quote = text[max(0, quoted.start() - 80) : quoted.start()]
+    return bool(
+        re.search(rf"\b(?:{verbs})\s+{speaker_pattern}\b", after_quote, flags=re.IGNORECASE)
+        or re.search(rf"\b{speaker_pattern}\s+(?:{verbs})\b", after_quote, flags=re.IGNORECASE)
+        or re.search(rf"\b{speaker_pattern}\s+(?:{verbs})\b", before_quote, flags=re.IGNORECASE)
+    )
 
 
 def safe_name(value: str) -> str:

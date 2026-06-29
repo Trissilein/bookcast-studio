@@ -241,6 +241,51 @@ def test_render_book_uses_confirmed_speaker_voice_map_for_prefixed_chunks(tmp_pa
     assert len({Path(chunk["audio_path"]).name for chunk in chunks}) == len(chunks)
 
 
+def test_render_book_guesses_dialogue_voice_from_said_tags(tmp_path: Path, monkeypatch) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Dialogue Book.txt"
+    source.write_text(
+        '"Hello there," said Ada.\n\n"Hallo", sagte Bob.\n\nNarrator continues.',
+        encoding="utf-8",
+    )
+
+    def fake_assemble(chunk_wavs, output_path, output_format, ffmpeg="ffmpeg", chapters=None):
+        output_path.write_bytes(b"audio")
+        return output_path
+
+    monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    provider = _RecordingTtsProvider()
+
+    library = BookLibrary(library_root)
+    try:
+        library.upsert_cleanup_profile(
+            "dialogue-lines",
+            {
+                "max_chars": 35,
+                "join_hyphenated_lines": True,
+                "collapse_blank_lines": True,
+                "collapse_spaces": True,
+                "remove_soft_hyphens": True,
+                "strip_trailing_whitespace": True,
+                "trim": True,
+                "max_blank_lines": 2,
+            },
+        )
+        book_id = library.import_source(source, cleanup_profile="dialogue-lines")
+        output = library.render_book(
+            book_id,
+            provider=provider,
+            voice="Narrator Voice",
+            voice_map={"Ada": "Ada Voice", "Bob": "Bob Voice"},
+            output_format="opus",
+        )
+    finally:
+        library.close()
+
+    assert output.exists()
+    assert [voice for _, voice in provider.calls] == ["Ada Voice", "Bob Voice", "Narrator Voice"]
+
+
 def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Audio Book.txt"
