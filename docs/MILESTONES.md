@@ -69,7 +69,8 @@ Status: Mostly done.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
-- Remaining: validate real `audio.cpp` model/family combinations end-to-end; improve voice/model selection UX; stress-test full-book renders.
+- Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
+- Remaining: validate real `audio.cpp` model/family combinations end-to-end; stress-test full-book renders.
 
 ## M4 Voices + Characters
 
@@ -138,6 +139,7 @@ Status: Partial.
 - Queue action guidance exists.
 - Render sample before full render exists.
 - Native Browse buttons exist for important paths.
+- Discovered TTS voices can be selected with First/Previous/Next controls.
 - Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Podcast script preview shows source-backed citations when available.
 - Startup restores saved library snapshot.

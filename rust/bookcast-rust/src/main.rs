@@ -118,6 +118,9 @@ export component AppWindow inherits Window {
     callback validate-podcast-script();
     callback save-podcast-script();
     callback discover-voices();
+    callback use-first-voice();
+    callback use-previous-voice();
+    callback use-next-voice();
     callback load-outputs();
     callback open-output();
     callback open-output-folder();
@@ -318,6 +321,9 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 Button { text: "Check Engine"; clicked => { root.check-engine(); } }
                                 Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
+                                Button { text: "First Voice"; clicked => { root.use-first-voice(); } }
+                                Button { text: "Previous Voice"; clicked => { root.use-previous-voice(); } }
+                                Button { text: "Next Voice"; clicked => { root.use-next-voice(); } }
                             }
 
                             HorizontalLayout {
@@ -1441,6 +1447,24 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             "voices",
             voice_args(&app),
         );
+    });
+
+    let weak = app.as_weak();
+    app.on_use_first_voice(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_voice_choice(&app, VoiceChoice::First);
+    });
+
+    let weak = app.as_weak();
+    app.on_use_previous_voice(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_voice_choice(&app, VoiceChoice::Previous);
+    });
+
+    let weak = app.as_weak();
+    app.on_use_next_voice(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_voice_choice(&app, VoiceChoice::Next);
     });
 
     let weak = app.as_weak();
@@ -2880,6 +2904,57 @@ fn voice_args(app: &AppWindow) -> Vec<String> {
     args
 }
 
+enum VoiceChoice {
+    First,
+    Previous,
+    Next,
+}
+
+fn apply_voice_choice(app: &AppWindow, choice: VoiceChoice) {
+    let current = app.get_voice_name().to_string();
+    let list = app.get_voice_list_text().to_string();
+    let Some(next) = voice_choice_from_list(&list, &current, choice) else {
+        app.set_status_text(
+            "No discovered voice IDs to choose from. Click Discover Voices first.".into(),
+        );
+        app.set_guide_text("Discover voices, then use First/Previous/Next Voice.".into());
+        return;
+    };
+    app.set_voice_name(next.clone().into());
+    app.set_status_text(format!("Voice selected: {next}").into());
+    app.set_render_plan_text(render_plan_text(app).into());
+    app.set_engine_setup_text(engine_setup_text(app).into());
+}
+
+fn voice_choice_from_list(list: &str, current: &str, choice: VoiceChoice) -> Option<String> {
+    let ids = voice_ids_from_list(list);
+    if ids.is_empty() {
+        return None;
+    }
+    let index = ids.iter().position(|id| id == current).unwrap_or(0);
+    let next_index = match choice {
+        VoiceChoice::First => 0,
+        VoiceChoice::Previous => {
+            if index == 0 {
+                ids.len() - 1
+            } else {
+                index - 1
+            }
+        }
+        VoiceChoice::Next => (index + 1) % ids.len(),
+    };
+    ids.get(next_index).cloned()
+}
+
+fn voice_ids_from_list(list: &str) -> Vec<String> {
+    list.lines()
+        .filter_map(|line| line.split('|').next())
+        .map(str::trim)
+        .filter(|id| !id.is_empty() && !id.starts_with("No voices"))
+        .map(ToString::to_string)
+        .collect()
+}
+
 fn tts_test_args(app: &AppWindow) -> Vec<String> {
     let mut args = vec![
         "bridge".into(),
@@ -3797,7 +3872,7 @@ fn handle_bridge_events(
                 );
                 set_guide(
                     weak.clone(),
-                    "Voices loaded. Voice field was filled with the first voice.",
+                    "Voices loaded. Voice field was filled with the first voice. Use Previous/Next Voice to compare candidates.",
                 );
             }
             Some("audio_cpp_health") => {
@@ -4882,8 +4957,11 @@ mod tests {
     use super::split_ids;
     use super::tts_test_preflight_problem_from;
     use super::validate_podcast_script_json;
+    use super::voice_choice_from_list;
+    use super::voice_ids_from_list;
     use super::workbench_readiness;
     use super::JobState;
+    use super::VoiceChoice;
 
     #[test]
     fn render_preflight_requires_book_id() {
@@ -5351,6 +5429,32 @@ mod tests {
         assert_eq!(
             job_queue_line(&job),
             "[####------]  42%  Running  render\n  id #23456  tts 2/5 rendered"
+        );
+    }
+
+    #[test]
+    fn voice_picker_cycles_discovered_voice_ids() {
+        let list = "voice-a | Alice | de_DE\nvoice-b | Bob | en_US\nvoice-c | Cara";
+
+        assert_eq!(
+            voice_ids_from_list(list),
+            vec!["voice-a", "voice-b", "voice-c"]
+        );
+        assert_eq!(
+            voice_choice_from_list(list, "", VoiceChoice::First).as_deref(),
+            Some("voice-a")
+        );
+        assert_eq!(
+            voice_choice_from_list(list, "voice-a", VoiceChoice::Next).as_deref(),
+            Some("voice-b")
+        );
+        assert_eq!(
+            voice_choice_from_list(list, "voice-a", VoiceChoice::Previous).as_deref(),
+            Some("voice-c")
+        );
+        assert_eq!(
+            voice_choice_from_list("No voices returned.", "", VoiceChoice::First),
+            None
         );
     }
 
