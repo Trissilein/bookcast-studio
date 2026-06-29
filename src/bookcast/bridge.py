@@ -145,6 +145,9 @@ def audio_cpp_health(
     families = audio_cpp_tts_families(str(audio_cpp_exe)) if audio_cpp_exe and executable_ready else []
     if families:
         hints.append("Installed audio.cpp TTS families: " + ", ".join(families))
+        if audio_cpp_family and audio_cpp_family not in families:
+            issues.append(f"audio.cpp family not found: {audio_cpp_family}")
+            hints.append("Use one of the installed TTS families: " + ", ".join(families))
 
     healthy = False
     if not issues:

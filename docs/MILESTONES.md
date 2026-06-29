@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 61 Python tests, 29 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 62 Python tests, 29 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -68,6 +68,7 @@ Status: Mostly done.
 - Windows SAPI fallback exists.
 - Piper provider using local Trispr-Flow binaries/voices exists.
 - Configurable `audio.cpp` external-process provider exists.
+- `audio.cpp` health validates configured family against CLI-reported TTS families.
 - Render cache keys include provider, voice, rate, and engine options.
 - Resumable chunk rendering exists.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.

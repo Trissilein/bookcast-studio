@@ -582,6 +582,39 @@ def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys
     assert events[0]["tts_families"] == ["pocket_tts", "qwen3_tts"]
 
 
+def test_bridge_audio_cpp_health_rejects_unknown_family(tmp_path: Path, capsys, monkeypatch) -> None:
+    exe = tmp_path / "audio-cpp.exe"
+    model = tmp_path / "model.gguf"
+    exe.write_text("fake", encoding="utf-8")
+    model.write_text("fake", encoding="utf-8")
+
+    class FakeAudioCppProvider:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("invalid family should stop before provider health")
+
+    monkeypatch.setattr("bookcast.bridge.AudioCppProvider", FakeAudioCppProvider)
+    monkeypatch.setattr("bookcast.bridge.audio_cpp_tts_families", lambda executable: ["pocket_tts", "qwen3_tts"])
+
+    result = main(
+        [
+            "bridge",
+            "audio-cpp-health",
+            "--audio-cpp-exe",
+            str(exe),
+            "--audio-cpp-model",
+            str(model),
+            "--audio-cpp-family",
+            "qwen3_asr",
+        ]
+    )
+    events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert events[0]["healthy"] is False
+    assert "audio.cpp family not found: qwen3_asr" in events[0]["issues"]
+    assert "Use one of the installed TTS families: pocket_tts, qwen3_tts" in events[0]["hints"]
+
+
 def test_bridge_voices_can_use_piper_provider(capsys, monkeypatch) -> None:
     class FakePiperProvider:
         id = "piper"
