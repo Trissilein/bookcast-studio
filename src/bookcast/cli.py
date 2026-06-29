@@ -210,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--piper-exe", default=None)
     bridge_podcast_render.add_argument("--piper-voice-dir", default=None)
     bridge_podcast_render.add_argument("--piper-model", default=None)
+    bridge_podcast_render.add_argument("--script-path", type=Path, default=None)
 
     bridge_podcast_interactive = bridge_sub.add_parser("podcast-interactive", help="Generate and render a non-blocking interactive podcast as JSONL")
     bridge_podcast_interactive.add_argument("book_id")
@@ -393,6 +394,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.piper_exe,
                 args.piper_voice_dir,
                 args.piper_model,
+                args.script_path,
             )
         if args.bridge_command == "podcast-interactive":
             return bridge.run_safely(

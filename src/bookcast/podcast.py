@@ -32,6 +32,35 @@ class PodcastScript:
         }
 
 
+def podcast_script_from_dict(data: dict[str, object], fallback_mode: str = "educational") -> PodcastScript:
+    turns = []
+    for item in data.get("turns", []):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        turns.append(
+            PodcastTurn(
+                speaker=str(item.get("speaker", "host")).strip() or "host",
+                text=text,
+            )
+        )
+    speakers = [str(speaker).strip() for speaker in data.get("speakers", []) if str(speaker).strip()]
+    if not speakers:
+        speakers = list(dict.fromkeys(turn.speaker for turn in turns)) or ["host"]
+    mode = str(data.get("mode", fallback_mode)).strip() or fallback_mode
+    if mode not in PODCAST_MODES:
+        mode = fallback_mode
+    return PodcastScript(
+        title=str(data.get("title", "Untitled Podcast")).strip() or "Untitled Podcast",
+        mode=mode,
+        summary=str(data.get("summary", "")).strip(),
+        speakers=speakers,
+        turns=turns,
+    )
+
+
 @dataclass(frozen=True)
 class InteractivePodcastStep:
     speaker: str

@@ -68,6 +68,7 @@ $Workbench = [ordered]@{
     speaker_voice_map = "host=; explainer=; skeptic="
     interactive_turns = "4"
     interactive_seed_prompt = ""
+    podcast_script_path = ""
     podcast_mode_index = 0
     engine_index = 0
     current_view = 6

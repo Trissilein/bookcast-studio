@@ -91,7 +91,8 @@ Status: Partial / usable prototype.
 - Multi-speaker podcast render exists.
 - Rust views expose static podcast generation and render.
 - Rust Podcast view shows speaker/turn review guidance and requires confirmed `speaker=voice` mappings.
-- Remaining: true script editor/reuse flow, better source citation display, better prompt controls, and real smoke tests with user-selected models.
+- Podcast render can reuse a saved reviewed script JSON instead of regenerating through Ollama.
+- Remaining: true script editor, better source citation display, better prompt controls, and real smoke tests with user-selected models.
 
 ## M6 Interactive Podcast
 

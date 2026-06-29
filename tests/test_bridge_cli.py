@@ -669,6 +669,8 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     assert script_events[2]["event"] == "podcast_script"
     assert script_events[2]["script"]["title"] == "Engineering Cast"
     assert script_events[-1]["path"].endswith("Engineering Cast.json")
+    script_path = script_events[-1]["path"]
+    FakeOllama.calls.clear()
 
     result = main(
         [
@@ -682,11 +684,14 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
             "--voice",
             "explainer=Narrator",
             "--confirm-voices",
+            "--script-path",
+            script_path,
         ]
     )
     render_events = _events(capsys.readouterr().out)
 
     assert result == 0
+    assert FakeOllama.calls == []
     rendered_script_events = [event for event in render_events if event.get("event") == "podcast_script"]
     assert rendered_script_events
     assert any(

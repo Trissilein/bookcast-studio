@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from bookcast.characters import suggest_characters
 from bookcast.llm import LlmProvider
-from bookcast.podcast import generate_podcast_script
+from bookcast.podcast import generate_podcast_script, podcast_script_from_dict
 
 
 def test_suggest_characters_from_llm_json() -> None:
@@ -30,6 +30,24 @@ def test_generate_podcast_script_from_llm_json() -> None:
     assert script.turns[1].text == "Here is the idea."
 
 
+def test_podcast_script_from_dict_normalizes_saved_json() -> None:
+    script = podcast_script_from_dict(
+        {
+            "title": "Saved",
+            "mode": "invalid",
+            "summary": "Summary",
+            "speakers": [],
+            "turns": [{"speaker": "host", "text": "Welcome."}],
+        },
+        fallback_mode="interview",
+    )
+
+    assert script.title == "Saved"
+    assert script.mode == "interview"
+    assert script.speakers == ["host"]
+    assert script.turns[0].text == "Welcome."
+
+
 class _FakeProvider(LlmProvider):
     def __init__(self, response: str) -> None:
         self.response = response
@@ -41,4 +59,3 @@ class _FakeProvider(LlmProvider):
         assert mode == "json"
         assert prompt
         return self.response
-

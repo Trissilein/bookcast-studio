@@ -55,6 +55,7 @@ export component AppWindow inherits Window {
     in-out property <string> character-review-text: "Review checklist: run suggestions, delete false positives, assign voices, then tick confirmation.";
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
     in-out property <string> podcast-review-text: "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render.";
+    in-out property <string> podcast-script-path: "";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
@@ -733,6 +734,8 @@ export component AppWindow inherits Window {
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
+                            Text { text: "Reviewed script path"; color: rgb(89, 99, 93); }
+                            LineEdit { text <=> root.podcast-script-path; }
                             HorizontalLayout {
                                 spacing: 10px;
                                 VerticalLayout {
@@ -988,6 +991,7 @@ struct WorkbenchSettings {
     speaker_voice_map: String,
     interactive_turns: String,
     interactive_seed_prompt: String,
+    podcast_script_path: String,
     podcast_mode_index: i32,
     engine_index: i32,
     current_view: i32,
@@ -2181,6 +2185,7 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_interactive_turns(settings.interactive_turns.into());
     }
     app.set_interactive_seed_prompt(settings.interactive_seed_prompt.into());
+    app.set_podcast_script_path(settings.podcast_script_path.into());
     app.set_podcast_mode_index(settings.podcast_mode_index);
     let engine_index = if settings.engine_index == 1
         && (!app.get_audio_cpp_exe().to_string().is_empty()
@@ -2220,6 +2225,7 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         speaker_voice_map: app.get_speaker_voice_map().to_string(),
         interactive_turns: app.get_interactive_turns().to_string(),
         interactive_seed_prompt: app.get_interactive_seed_prompt().to_string(),
+        podcast_script_path: app.get_podcast_script_path().to_string(),
         podcast_mode_index: app.get_podcast_mode_index(),
         engine_index: app.get_engine_index(),
         current_view: app.get_current_view(),
@@ -2587,6 +2593,10 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
     }
     if app.get_speaker_voices_confirmed() {
         args.push("--confirm-voices".into());
+    }
+    let script_path = app.get_podcast_script_path().to_string();
+    if !script_path.trim().is_empty() {
+        args.extend(["--script-path".into(), script_path]);
     }
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
@@ -3370,8 +3380,16 @@ fn podcast_review_text(script: &Value, saved_or_output_path: Option<&str>) -> St
         .filter(|path| !path.trim().is_empty())
         .map(|path| format!(" Saved/output: {path}."))
         .unwrap_or_default();
+    let render_note = if saved_or_output_path
+        .map(|path| path.to_ascii_lowercase().ends_with(".json"))
+        .unwrap_or(false)
+    {
+        "Render Podcast will reuse this reviewed script path."
+    } else {
+        "Render Podcast can reuse a reviewed script when Reviewed script path points to a saved JSON."
+    };
     format!(
-        "Review checklist: {speaker_count} speaker(s), {turn_count} turn(s). Assign every speaker=voice, tick confirmation, then render. Note: Render Podcast generates a fresh script for now; use generated script as review preview.{path_note}"
+        "Review checklist: {speaker_count} speaker(s), {turn_count} turn(s). Assign every speaker=voice, tick confirmation, then render. {render_note}{path_note}"
     )
 }
 
@@ -4184,6 +4202,7 @@ fn handle_bridge_events(
                         set_speaker_voice_map(weak.clone(), &speaker_template);
                         set_speaker_voices_confirmed(weak.clone(), false);
                     }
+                    set_podcast_script_path(weak.clone(), path);
                     set_podcast_review_text(weak.clone(), &podcast_review_text(script, Some(path)));
                     set_guide(weak.clone(), &format!("Podcast script saved: {path}"));
                 } else if let Some(output) = value.get("output").and_then(Value::as_str) {
@@ -4375,6 +4394,15 @@ fn set_podcast_review_text(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_podcast_review_text(text.into());
+        }
+    });
+}
+
+fn set_podcast_script_path(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_podcast_script_path(text.into());
         }
     });
 }
@@ -4927,7 +4955,7 @@ mod tests {
     }
 
     #[test]
-    fn podcast_review_text_counts_speakers_and_warns_about_fresh_render_script() {
+    fn podcast_review_text_counts_speakers_and_explains_script_reuse() {
         let script = json!({
             "speakers": ["host", "explainer"],
             "turns": [
@@ -4939,7 +4967,7 @@ mod tests {
         let review = podcast_review_text(&script, Some("D:\\out\\podcast.json"));
         assert!(review.contains("2 speaker(s), 2 turn(s)"));
         assert!(review.contains("Assign every speaker=voice"));
-        assert!(review.contains("generates a fresh script"));
+        assert!(review.contains("will reuse this reviewed script path"));
         assert!(review.contains("D:\\out\\podcast.json"));
     }
 

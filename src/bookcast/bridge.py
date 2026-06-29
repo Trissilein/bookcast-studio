@@ -13,7 +13,7 @@ from .characters import suggest_characters as generate_character_suggestions
 from .importers import SUPPORTED_EXTENSIONS, extract
 from .library import BookLibrary, safe_name
 from .llm import OllamaProvider
-from .podcast import PodcastTurn, generate_interactive_step, generate_podcast_script
+from .podcast import PodcastTurn, generate_interactive_step, generate_podcast_script, podcast_script_from_dict
 from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvider, audio_cpp_tts_families
 
 
@@ -345,15 +345,28 @@ def podcast_render(
     piper_exe: str | None = None,
     piper_voice_dir: str | None = None,
     piper_model: str | None = None,
+    script_path: Path | None = None,
 ) -> int:
     voice_map = _confirmed_voice_map(voice_entries or [], confirm_voices)
-    emit("job_started", job="podcast_render", book_id=book_id, mode=mode, format=output_format, provider=provider)
-    text = _book_text(library_root, book_id)
-    llm = OllamaProvider(model=model, base_url=ollama_url)
-    if not llm.health():
-        raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+    emit(
+        "job_started",
+        job="podcast_render",
+        book_id=book_id,
+        mode=mode,
+        format=output_format,
+        provider=provider,
+        script_path=str(script_path) if script_path else "",
+    )
     emit("job_progress", job="podcast_render", progress=20)
-    script = generate_podcast_script(text, llm, mode=mode)
+    if script_path:
+        script_data = json.loads(Path(script_path).read_text(encoding="utf-8"))
+        script = podcast_script_from_dict(script_data, fallback_mode=mode)
+    else:
+        text = _book_text(library_root, book_id)
+        llm = OllamaProvider(model=model, base_url=ollama_url)
+        if not llm.health():
+            raise RuntimeError(f"Ollama unavailable at {ollama_url}")
+        script = generate_podcast_script(text, llm, mode=mode)
     tts_provider = _tts_provider(
         provider,
         audio_cpp_exe=audio_cpp_exe,
