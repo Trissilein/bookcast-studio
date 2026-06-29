@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 50 Python tests, 27 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 51 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -70,7 +70,8 @@ Status: Mostly done.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
-- Remaining: validate real `audio.cpp` model/family combinations end-to-end; stress-test full-book renders.
+- Synthetic long-render stress covers many chunks, progress, assemble, and cache resume behavior.
+- Remaining: validate real `audio.cpp` model/family combinations end-to-end and stress-test real full-book renders.
 
 ## M4 Voices + Characters
 

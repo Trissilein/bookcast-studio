@@ -103,6 +103,78 @@ def test_render_book_cache_key_includes_voice(tmp_path: Path, monkeypatch) -> No
     assert second_path.exists()
 
 
+def test_render_book_long_run_progress_and_resume_cache(tmp_path: Path, monkeypatch) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Long Queue.txt"
+    source.write_text(
+        "\n\n".join(
+            f"Section {index}. This paragraph exists to force several render chunks for queue stress."
+            for index in range(60)
+        ),
+        encoding="utf-8",
+    )
+
+    assemble_calls: list[list[Path]] = []
+
+    def fake_assemble(chunk_wavs, output_path, output_format, ffmpeg="ffmpeg", chapters=None):
+        assemble_calls.append(list(chunk_wavs))
+        output_path.write_bytes(b"audio")
+        return output_path
+
+    monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    provider = _RecordingTtsProvider()
+    first_progress: list[dict[str, object]] = []
+    second_progress: list[dict[str, object]] = []
+
+    library = BookLibrary(library_root)
+    try:
+        library.upsert_cleanup_profile(
+            "queue-stress",
+            {
+                "max_chars": 80,
+                "join_hyphenated_lines": True,
+                "collapse_blank_lines": True,
+                "collapse_spaces": True,
+                "remove_soft_hyphens": True,
+                "strip_trailing_whitespace": True,
+                "trim": True,
+                "max_blank_lines": 2,
+            },
+        )
+        book_id = library.import_source(source, cleanup_profile="queue-stress")
+        chunks = library.get_chunks(book_id)
+        assert len(chunks) >= 50
+
+        first_output = library.render_book(
+            book_id,
+            provider=provider,
+            voice="Narrator",
+            output_format="opus",
+            progress_callback=first_progress.append,
+        )
+        calls_after_first = len(provider.calls)
+        second_output = library.render_book(
+            book_id,
+            provider=provider,
+            voice="Narrator",
+            output_format="opus",
+            progress_callback=second_progress.append,
+        )
+    finally:
+        library.close()
+
+    assert first_output.exists()
+    assert second_output.exists()
+    assert calls_after_first == len(chunks)
+    assert len(provider.calls) == calls_after_first
+    assert len(assemble_calls) == 2
+    assert len(assemble_calls[0]) == len(chunks)
+    assert first_progress[-1] == {"phase": "assemble", "progress": 92, "chunk": len(chunks), "total": len(chunks)}
+    assert second_progress[-1] == {"phase": "assemble", "progress": 92, "chunk": len(chunks), "total": len(chunks)}
+    assert any(event.get("phase") == "tts" and event.get("chunk") == len(chunks) for event in first_progress)
+    assert all(event.get("cached") is True for event in second_progress if event.get("phase") == "tts" and event.get("chunk"))
+
+
 def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Audio Book.txt"
