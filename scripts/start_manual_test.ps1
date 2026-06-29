@@ -1,7 +1,9 @@
 param(
     [switch]$SkipReadiness,
     [switch]$KeepExistingLibrary,
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [string]$CalibreLibrary = "",
+    [string]$CalibredbExe = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +14,13 @@ $ManualRoot = Join-Path $Repo ".manual-test"
 $Library = Join-Path $ManualRoot "library"
 $Settings = Join-Path $Repo ".bookcast-workbench.json"
 New-Item -ItemType Directory -Force -Path $ManualRoot | Out-Null
+
+if ($CalibreLibrary -and -not (Test-Path -LiteralPath $CalibreLibrary -PathType Container)) {
+    throw "Calibre library folder not found: $CalibreLibrary"
+}
+if ($CalibredbExe -and -not (Test-Path -LiteralPath $CalibredbExe -PathType Leaf)) {
+    throw "calibredb executable not found: $CalibredbExe"
+}
 
 if (-not $KeepExistingLibrary -and (Test-Path $Library)) {
     $ResolvedManualRoot = (Resolve-Path $ManualRoot).Path
@@ -48,7 +57,8 @@ if (Test-Path $Settings) {
 $Workbench = [ordered]@{
     library_path = [string]$Smoke.library
     source_path = ""
-    calibre_path = ""
+    calibre_path = [string]$CalibreLibrary
+    calibredb_path = [string]$CalibredbExe
     calibre_ids = ""
     calibre_limit = "50"
     book_id = [string]$Smoke.book_id

@@ -125,6 +125,12 @@ early.
 prints the packaged executable path for manual testing.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
 workbench at that book, and launches the desktop app for hands-on testing.
+For a real Calibre pass, prefill the wizard:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1 -CalibreLibrary "D:\Books\Calibre Library" -CalibredbExe "C:\Program Files\Calibre2\calibredb.exe"
+```
+
 On startup, the Rust workbench auto-loads the saved library snapshot: book list,
 selected book preview, and outputs.
 
