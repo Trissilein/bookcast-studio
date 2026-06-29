@@ -3510,8 +3510,26 @@ fn character_review_text(candidates: Option<&Vec<Value>>) -> String {
         return "No candidates. Re-run extraction with Ollama running, or manually enter speaker=voice pairs.".to_string();
     }
     format!(
-        "Review checklist: {count} candidate(s). Delete false positives, merge duplicate names, assign a voice to each kept speaker, then tick confirmation."
+        "Review checklist: {count} candidate(s). Check confidence/excerpts, delete false positives, merge duplicate names, assign a voice to each kept speaker, then tick confirmation."
     )
+}
+
+fn character_candidate_line(item: &Value) -> String {
+    let name = item.get("name").and_then(Value::as_str).unwrap_or("");
+    let role = item.get("role").and_then(Value::as_str).unwrap_or("");
+    let evidence = item.get("evidence").and_then(Value::as_str).unwrap_or("");
+    let confidence = item
+        .get("confidence")
+        .and_then(Value::as_f64)
+        .map(|value| format!(" | confidence {:.0}%", value * 100.0))
+        .unwrap_or_default();
+    let excerpt = item
+        .get("excerpt")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!(" | excerpt: {}", value.trim()))
+        .unwrap_or_default();
+    format!("{name} | {role}{confidence} | {evidence}{excerpt}")
 }
 
 fn podcast_review_text(script: &Value, saved_or_output_path: Option<&str>) -> String {
@@ -4322,13 +4340,7 @@ fn handle_bridge_events(
                     .map(|items| {
                         items
                             .iter()
-                            .map(|item| {
-                                let name = item.get("name").and_then(Value::as_str).unwrap_or("");
-                                let role = item.get("role").and_then(Value::as_str).unwrap_or("");
-                                let evidence =
-                                    item.get("evidence").and_then(Value::as_str).unwrap_or("");
-                                format!("{name} | {role} | {evidence}")
-                            })
+                            .map(character_candidate_line)
                             .collect::<Vec<_>>()
                             .join("\n")
                     })
@@ -4798,6 +4810,7 @@ mod tests {
     use super::audio_cpp_update_status;
     use super::calibre_action_text;
     use super::calibre_suggested_path;
+    use super::character_candidate_line;
     use super::character_review_text;
     use super::character_voice_template;
     use super::confirmed_voice_entries_from;
@@ -5120,7 +5133,18 @@ mod tests {
             "Narrator=; Ada="
         );
         assert!(character_review_text(Some(&candidates)).contains("3 candidate(s)"));
+        assert!(character_review_text(Some(&candidates)).contains("confidence/excerpts"));
         assert!(character_review_text(None).contains("No candidates"));
+        assert_eq!(
+            character_candidate_line(&json!({
+                "name": "Ada",
+                "role": "character",
+                "evidence": "dialogue",
+                "confidence": 0.82,
+                "excerpt": "Ada said hello."
+            })),
+            "Ada | character | confidence 82% | dialogue | excerpt: Ada said hello."
+        );
     }
 
     #[test]

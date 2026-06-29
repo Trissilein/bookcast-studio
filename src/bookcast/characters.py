@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from .llm import LlmProvider, parse_json_object
 
@@ -10,6 +11,8 @@ class CharacterCandidate:
     name: str
     role: str
     evidence: str
+    confidence: float | None = None
+    excerpt: str = ""
 
 
 def suggest_characters(text: str, provider: LlmProvider, max_chars: int = 12000) -> list[CharacterCandidate]:
@@ -18,7 +21,13 @@ Extract recurring speakers or characters from this book excerpt.
 Return JSON only:
 {{
   "characters": [
-    {{"name": "Narrator", "role": "narrator|character|speaker", "evidence": "short reason"}}
+    {{
+      "name": "Narrator",
+      "role": "narrator|character|speaker",
+      "evidence": "short reason",
+      "confidence": 0.0,
+      "excerpt": "short source quote or paraphrase"
+    }}
   ]
 }}
 
@@ -36,7 +45,18 @@ Text:
                 name=name,
                 role=str(item.get("role", "character")).strip() or "character",
                 evidence=str(item.get("evidence", "")).strip(),
+                confidence=_confidence(item.get("confidence")),
+                excerpt=str(item.get("excerpt", "")).strip(),
             )
         )
     return result
 
+
+def _confidence(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(1.0, parsed))

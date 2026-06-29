@@ -599,7 +599,9 @@ def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) 
             return True
 
         def generate(self, prompt: str, mode: str = "json") -> str:
-            return '{"characters":[{"name":"Ada","role":"character","evidence":"dialogue"}]}'
+            assert '"confidence": 0.0' in prompt
+            assert '"excerpt": "short source quote or paraphrase"' in prompt
+            return '{"characters":[{"name":"Ada","role":"character","evidence":"dialogue","confidence":0.8,"excerpt":"Ada said hello."}]}'
 
     monkeypatch.setattr("bookcast.bridge.OllamaProvider", FakeOllama)
 
@@ -609,6 +611,8 @@ def test_bridge_characters_emit_candidates(tmp_path: Path, capsys, monkeypatch) 
     assert result == 0
     assert [event["event"] for event in events] == ["job_started", "job_progress", "characters", "job_done"]
     assert events[2]["candidates"][0]["name"] == "Ada"
+    assert events[2]["candidates"][0]["confidence"] == 0.8
+    assert events[2]["candidates"][0]["excerpt"] == "Ada said hello."
 
 
 def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, monkeypatch) -> None:

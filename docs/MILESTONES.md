@@ -80,7 +80,8 @@ Status: Partial.
 - Speaker-to-voice mappings exist.
 - Manual confirmation before multi-speaker render exists.
 - Rust Characters view now seeds an editable `speaker=voice` review template from LLM candidates.
-- Remaining: per-character audiobook casting flow and better confidence/excerpt display.
+- Rust Characters view shows confidence and excerpt fields when the LLM returns them.
+- Remaining: per-character audiobook casting flow and real-world tuning of confidence/excerpt quality.
 
 ## M5 Static Podcast Generator
 
