@@ -1961,7 +1961,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     let weak = app.as_weak();
     let cancel_state = state;
     app.on_cancel_job(move || {
-        cancel_active_job(weak.clone(), cancel_state.active_pid.clone());
+        cancel_active_job(
+            weak.clone(),
+            cancel_state.active_pid.clone(),
+            cancel_state.jobs.clone(),
+        );
     });
 }
 
@@ -2026,7 +2030,10 @@ fn run_bridge(
                     Ok(output) => {
                         let stdout = String::from_utf8_lossy(&output.stdout);
                         let stderr = String::from_utf8_lossy(&output.stderr);
-                        if output.status.success() {
+                        let cancelled = job_has_status(&state.jobs, job_id, "cancelled");
+                        if cancelled {
+                            set_status(weak.clone(), &format!("{label} cancelled."));
+                        } else if output.status.success() {
                             set_status(weak.clone(), &format!("{label} completed."));
                             update_job(
                                 weak.clone(),
@@ -2047,14 +2054,16 @@ fn run_bridge(
                                 "Process failed",
                             );
                         }
-                        handle_bridge_events(
-                            weak.clone(),
-                            state.jobs.clone(),
-                            state.book_ids.clone(),
-                            state.book_index.clone(),
-                            job_id,
-                            &stdout,
-                        );
+                        if !cancelled {
+                            handle_bridge_events(
+                                weak.clone(),
+                                state.jobs.clone(),
+                                state.book_ids.clone(),
+                                state.book_index.clone(),
+                                job_id,
+                                &stdout,
+                            );
+                        }
                         let mut text = String::new();
                         if !stdout.trim().is_empty() {
                             text.push_str(stdout.trim());
@@ -2068,13 +2077,15 @@ fn run_bridge(
                         if text.is_empty() {
                             text = format!("{label} finished with no output.");
                         }
-                        update_job_detail(
-                            weak.clone(),
-                            state.jobs.clone(),
-                            job_id,
-                            &summarize_output(&text),
-                        );
-                        if label == "diagnose" {
+                        if !cancelled {
+                            update_job_detail(
+                                weak.clone(),
+                                state.jobs.clone(),
+                                job_id,
+                                &summarize_output(&text),
+                            );
+                        }
+                        if label == "diagnose" && !cancelled {
                             set_diagnostics(weak.clone(), &text);
                         }
                     }
@@ -2160,7 +2171,11 @@ fn audio_cpp_update_status(pinned: &str, remote: &str) -> String {
     }
 }
 
-fn cancel_active_job(weak: slint::Weak<AppWindow>, active_pid: Arc<Mutex<Option<u32>>>) {
+fn cancel_active_job(
+    weak: slint::Weak<AppWindow>,
+    active_pid: Arc<Mutex<Option<u32>>>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+) {
     let pid = *active_pid.lock().expect("pid lock");
     let Some(pid) = pid else {
         set_status(weak.clone(), "No active job to cancel.");
@@ -2178,7 +2193,12 @@ fn cancel_active_job(weak: slint::Weak<AppWindow>, active_pid: Arc<Mutex<Option<
     match result {
         Ok(output) if output.status.success() => {
             set_status(weak.clone(), "Cancel sent.");
-            push_log(weak, &format!("Cancelled process {pid}."));
+            mark_latest_running_job_cancelled(
+                weak.clone(),
+                jobs,
+                &format!("Cancel sent to process {pid}"),
+            );
+            push_log(weak, &format!("Cancel sent to process {pid}."));
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -3185,6 +3205,36 @@ fn update_job_detail(
     render_queue(weak, jobs);
 }
 
+fn job_has_status(jobs: &Arc<Mutex<Vec<JobState>>>, id: u64, status: &str) -> bool {
+    let jobs = jobs.lock().expect("jobs lock");
+    jobs.iter()
+        .find(|job| job.id == id)
+        .map(|job| job.status == status)
+        .unwrap_or(false)
+}
+
+fn mark_latest_running_job_cancelled(
+    weak: slint::Weak<AppWindow>,
+    jobs: Arc<Mutex<Vec<JobState>>>,
+    detail: &str,
+) -> bool {
+    let changed = {
+        let mut jobs = jobs.lock().expect("jobs lock");
+        if let Some(job) = jobs.iter_mut().rev().find(|job| job.status == "running") {
+            job.status = "cancelled".to_string();
+            job.progress = 100;
+            job.detail = detail.to_string();
+            true
+        } else {
+            false
+        }
+    };
+    if changed {
+        render_queue(weak, jobs);
+    }
+    changed
+}
+
 fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
     let (summary, action, text) = {
         let jobs = jobs.lock().expect("jobs lock");
@@ -3246,6 +3296,9 @@ fn queue_summary(jobs: &[JobState]) -> String {
         return format!("Attention: {} failed | {}", job.label, job.detail);
     }
     if let Some(job) = jobs.last() {
+        if job.status == "cancelled" {
+            return format!("Last cancelled: {} | {}", job.label, job.detail);
+        }
         return format!("Last done: {} | {}", job.label, job.detail);
     }
     "No active jobs. Queue idle.".to_string()
@@ -3265,6 +3318,12 @@ fn queue_action(jobs: &[JobState]) -> String {
         );
     }
     if let Some(job) = jobs.last() {
+        if job.status == "cancelled" {
+            return format!(
+                "Queue action: {} was cancelled. Use Retry Last to resume from cached chunks when ready.",
+                job.label
+            );
+        }
         if job.status == "done" && looks_like_output_path(&job.detail) {
             return "Queue action: output exists. Use Open File to play or Open Folder to inspect."
                 .to_string();
@@ -5515,6 +5574,22 @@ mod tests {
         assert_eq!(
             queue_action(&failed),
             "Queue action: fix the issue, then Retry Last. Failed step: metadata.db missing."
+        );
+
+        let cancelled = vec![JobState {
+            id: 4,
+            label: "render".to_string(),
+            status: "cancelled".to_string(),
+            progress: 100,
+            detail: "Cancel sent to process 123".to_string(),
+        }];
+        assert_eq!(
+            queue_summary(&cancelled),
+            "Last cancelled: render | Cancel sent to process 123"
+        );
+        assert_eq!(
+            queue_action(&cancelled),
+            "Queue action: render was cancelled. Use Retry Last to resume from cached chunks when ready."
         );
     }
 
