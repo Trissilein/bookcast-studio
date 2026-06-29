@@ -66,8 +66,8 @@ def _extract_text_file(path: Path) -> Document:
     raw = path.read_text(encoding="utf-8-sig", errors="replace")
     text = clean_text(raw)
     metadata = probe(path)
-    chapter = Chapter(index=0, title=metadata.title, text=text)
-    return Document(source_path=path, metadata=metadata, chapters=[chapter], raw_text=text)
+    chapters = _plain_text_chapters(text, metadata.title, markdown=path.suffix.lower() == ".md")
+    return Document(source_path=path, metadata=metadata, chapters=chapters, raw_text=text)
 
 
 def _epub_metadata(path: Path) -> Metadata:
@@ -186,6 +186,33 @@ def _epub_spine_items(opf: ET.Element, opf_dir: str) -> list[str]:
 
 def _xml_text(node: ET.Element | None) -> str | None:
     return node.text.strip() if node is not None and node.text else None
+
+
+def _plain_text_chapters(text: str, default_title: str, *, markdown: bool) -> list[Chapter]:
+    heading_pattern = re.compile(r"^\s{0,3}#{1,3}\s+(.+?)\s*#*\s*$") if markdown else re.compile(
+        r"^\s*((?:chapter|kapitel|part|teil)\s+[\wIVXLCDMivxlcdm\d][\wIVXLCDMivxlcdm\d .:-]*)\s*$",
+        flags=re.IGNORECASE,
+    )
+    chapters: list[Chapter] = []
+    title = default_title
+    lines: list[str] = []
+
+    for line in text.splitlines():
+        match = heading_pattern.match(line)
+        if match:
+            if lines:
+                body = clean_text("\n".join(lines))
+                if body:
+                    chapters.append(Chapter(index=len(chapters), title=title, text=body))
+            title = clean_text(match.group(1))
+            lines = []
+            continue
+        lines.append(line)
+
+    body = clean_text("\n".join(lines))
+    if body:
+        chapters.append(Chapter(index=len(chapters), title=title, text=body))
+    return chapters or [Chapter(index=0, title=default_title, text=text)]
 
 
 def _html_to_text(raw_html: str) -> str:

@@ -73,6 +73,7 @@ def test_bridge_source_probe_file_and_folder(tmp_path: Path, capsys) -> None:
     (folder / "Ada Author - One.txt").write_text("One.", encoding="utf-8")
     (folder / "skip.jpg").write_bytes(b"skip")
     expected_text = "# Probe Book\n\nPreview body."
+    expected_chapter_text = "Preview body."
 
     result = main(["bridge", "source-probe", str(source)])
     file_events = _events(capsys.readouterr().out)
@@ -89,7 +90,7 @@ def test_bridge_source_probe_file_and_folder(tmp_path: Path, capsys) -> None:
             "language": "",
             "chapter_count": 1,
             "chars": len(expected_text),
-            "chapters": [{"index": 0, "title": "Probe Book", "chars": len(expected_text)}],
+            "chapters": [{"index": 0, "title": "Probe Book", "chars": len(expected_chapter_text)}],
             "preview": expected_text,
         }
     ]

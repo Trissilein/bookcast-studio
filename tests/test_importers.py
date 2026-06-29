@@ -25,6 +25,27 @@ def test_txt_extract(tmp_path: Path) -> None:
     assert document.chapters[0].text == "Hello\n\nWorld"
 
 
+def test_txt_chapter_heading_detection_supports_german(tmp_path: Path) -> None:
+    source = tmp_path / "Erika Mustermann - Roman.txt"
+    source.write_text("Kapitel 1\n\nErster Absatz.\n\nKapitel 2: Weiter\n\nZweiter Absatz.", encoding="utf-8")
+
+    document = extract(source)
+
+    assert [chapter.title for chapter in document.chapters] == ["Kapitel 1", "Kapitel 2: Weiter"]
+    assert [chapter.text for chapter in document.chapters] == ["Erster Absatz.", "Zweiter Absatz."]
+
+
+def test_markdown_heading_detection_uses_headings_as_chapters(tmp_path: Path) -> None:
+    source = tmp_path / "Ada Author - Notes.md"
+    source.write_text("# Opening\n\nFirst text.\n\n## Second Part\n\nSecond text.", encoding="utf-8")
+
+    document = extract(source)
+
+    assert document.metadata.title == "Notes"
+    assert [chapter.title for chapter in document.chapters] == ["Opening", "Second Part"]
+    assert [chapter.text for chapter in document.chapters] == ["First text.", "Second text."]
+
+
 def test_docx_extract(tmp_path: Path) -> None:
     source = tmp_path / "Ada Author - Doc Book.docx"
     _write_docx(source, ["First paragraph.", "Second paragraph."])
