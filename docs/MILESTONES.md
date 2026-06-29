@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 56 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 58 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -32,7 +32,8 @@ Status: Mostly done.
 - Source copies are stored in the BookCast library root.
 - Books, sources, chapters, chunks, outputs, jobs, voices, speakers, and podcast data are persisted.
 - Rust Library view can show books, previews, chapters, outputs, and selected book state.
-- Remaining: real-world import quality pass with large EPUBs, messy PDFs, and duplicate edge cases.
+- Folder import is recursive and reuses already imported file hashes instead of creating duplicate books.
+- Remaining: real-world import quality pass with large EPUBs and messy PDFs.
 
 ## M1.5 Calibre Import
 

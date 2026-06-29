@@ -65,6 +65,23 @@ def test_bridge_import_folder_imports_supported_files(tmp_path: Path, capsys) ->
     assert events[-1]["event"] == "book_preview"
 
 
+def test_bridge_import_folder_marks_duplicate_sources(tmp_path: Path, capsys) -> None:
+    library_root = tmp_path / "library"
+    source_dir = tmp_path / "sources"
+    source_dir.mkdir()
+    (source_dir / "Ada Author - One.txt").write_text("Same body.", encoding="utf-8")
+    (source_dir / "Ada Author - One Copy.txt").write_text("Same body.", encoding="utf-8")
+
+    result = main(["bridge", "import", str(source_dir), "--library", str(library_root)])
+    events = _events(capsys.readouterr().out)
+    imported = [event for event in events if event.get("event") == "source_imported"]
+
+    assert result == 0
+    assert [event["duplicate"] for event in imported] == [False, True]
+    assert imported[0]["book_id"] == imported[1]["book_id"]
+    assert events[-2]["count"] == 2
+
+
 def test_bridge_source_probe_file_and_folder(tmp_path: Path, capsys) -> None:
     source = tmp_path / "Ada Author - Probe Book.md"
     source.write_text("# Probe Book\n\nPreview body.", encoding="utf-8")

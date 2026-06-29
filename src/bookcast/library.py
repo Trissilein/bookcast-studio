@@ -30,8 +30,24 @@ class BookLibrary:
         self.db.close()
 
     def import_source(self, source_path: Path, cleanup_profile: str = "standard") -> str:
+        existing = self.find_file_source(source_path)
+        if existing:
+            return existing
         document = extract(Path(source_path))
         return self._store_document(document, Path(source_path), source_kind="file", cleanup_profile=cleanup_profile)
+
+    def find_file_source(self, source_path: Path) -> str | None:
+        source_hash = _sha256(Path(source_path))
+        row = self.db.conn.execute(
+            """
+            SELECT book_id FROM sources
+            WHERE source_kind = 'file'
+              AND source_sha256 = ?
+            LIMIT 1
+            """,
+            (source_hash,),
+        ).fetchone()
+        return str(row["book_id"]) if row else None
 
     def import_calibre_book(
         self,

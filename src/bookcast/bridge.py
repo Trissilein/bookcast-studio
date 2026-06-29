@@ -519,10 +519,11 @@ def import_file(library_root: Path, source: Path, cleanup_profile: str = "standa
         imported: list[dict[str, object]] = []
         total = len(sources)
         for index, path in enumerate(sources, start=1):
+            duplicate = library.find_file_source(path) is not None
             book_id = library.import_source(path, cleanup_profile=cleanup_profile)
             book = library.get_book(book_id)
-            imported.append({"book_id": book_id, "book": book, "source": str(path)})
-            emit("source_imported", book_id=book_id, book=book, source=str(path))
+            imported.append({"book_id": book_id, "book": book, "source": str(path), "duplicate": duplicate})
+            emit("source_imported", book_id=book_id, book=book, source=str(path), duplicate=duplicate)
             emit("job_progress", job="import", progress=int(index / total * 100), imported=index, total=total)
         first = imported[0]
         emit("job_done", job="import", book_id=first["book_id"], book=first["book"], count=len(imported), imported=imported)

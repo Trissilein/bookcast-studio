@@ -29,6 +29,25 @@ def test_library_import_stores_book_chapters_chunks_and_source(tmp_path: Path) -
     assert (library_root / "books" / book_id / "source" / source.name).exists()
 
 
+def test_library_import_source_reuses_same_file_hash(tmp_path: Path) -> None:
+    library_root = tmp_path / "library"
+    first = tmp_path / "Ada Author - Duplicate One.txt"
+    second = tmp_path / "Ada Author - Duplicate Two.txt"
+    first.write_text("Same book text.", encoding="utf-8")
+    second.write_text("Same book text.", encoding="utf-8")
+
+    library = BookLibrary(library_root)
+    try:
+        first_id = library.import_source(first)
+        second_id = library.import_source(second)
+        books = library.list_books()
+    finally:
+        library.close()
+
+    assert second_id == first_id
+    assert len(books) == 1
+
+
 def test_cli_import_smoke(tmp_path: Path, capsys) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - CLI Book.md"
