@@ -47,7 +47,7 @@ def main() -> int:
         book_id = str(first_event(imported, "job_done")["book_id"])
 
         preview = first_event(imported, "book_preview")
-        require("Acceptance Smoke" in str(preview.get("preview", "")), "Import preview missing expected text")
+        require("Chapter one starts here" in str(preview.get("preview", "")), "Import preview missing expected text")
 
         if not args.skip_render:
             sample = run_bridge(
