@@ -25,8 +25,11 @@ def main() -> int:
     library = args.library or temp_dir / "library"
     source = temp_dir / "Ada Author - Acceptance Smoke.txt"
     source.write_text(
+        "Chapter 1\n"
         "Chapter one starts here. This is a short acceptance sample.\n\n"
-        "Second paragraph exists so cleanup and chunking have real input.",
+        "Second paragraph exists so cleanup and chunking have real input.\n\n"
+        "Chapter 2\n"
+        "The second chapter is short, but it must create a real M4B chapter mark.",
         encoding="utf-8",
     )
 
@@ -65,6 +68,15 @@ def main() -> int:
             assert_event(rendered, "job_done")
             output_path = Path(str(first_event(rendered, "job_done")["output"]))
             require_audio_file(repo, output_path, "Render output")
+
+            rendered_m4b = run_bridge(
+                repo,
+                ["render", book_id, "--library", str(library), "--format", "m4b", "--voice", voice],
+            )
+            assert_event(rendered_m4b, "job_done")
+            m4b_path = Path(str(first_event(rendered_m4b, "job_done")["output"]))
+            require_audio_file(repo, m4b_path, "M4B render output")
+            require_chapters(repo, m4b_path, 2)
 
             outputs = run_bridge(repo, ["outputs", "--library", str(library), "--book-id", book_id])
             assert_event(outputs, "outputs")
@@ -161,6 +173,11 @@ def require_audio_file(repo: Path, path: Path, label: str) -> None:
     require(duration > 0.0, f"{label} has no positive duration: {path}")
 
 
+def require_chapters(repo: Path, path: Path, minimum: int) -> None:
+    count = ffprobe_chapter_count(repo, path)
+    require(count >= minimum, f"Expected at least {minimum} chapter(s), found {count}: {path}")
+
+
 def ffprobe_duration(repo: Path, path: Path) -> float:
     proc = subprocess.run(
         [
@@ -185,6 +202,32 @@ def ffprobe_duration(repo: Path, path: Path) -> float:
         return float(proc.stdout.strip())
     except ValueError as exc:
         raise RuntimeError(f"ffprobe returned invalid duration for {path}: {proc.stdout!r}") from exc
+
+
+def ffprobe_chapter_count(repo: Path, path: Path) -> int:
+    proc = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_chapters",
+            str(path),
+        ],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip()
+        raise RuntimeError(f"ffprobe chapter probe failed for {path}: {detail}")
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"ffprobe returned invalid chapter JSON for {path}: {proc.stdout!r}") from exc
+    return len(data.get("chapters") or [])
 
 
 def require(value: object, message: str) -> None:

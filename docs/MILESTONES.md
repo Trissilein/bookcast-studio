@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 62 Python tests, 29 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 62 Python tests, 30 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -80,6 +80,7 @@ Status: Mostly done.
 - Audiobook render can use confirmed `speaker=voice` mappings for chunks that start with `Speaker:`.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
 - Synthetic long-render stress covers many chunks, progress, assemble, and cache resume behavior.
+- Acceptance smoke renders Opus plus M4B and verifies chapter marks through `ffprobe`.
 - Remaining: validate real `audio.cpp` model/family combinations end-to-end and stress-test real full-book renders.
 
 ## M4 Voices + Characters
