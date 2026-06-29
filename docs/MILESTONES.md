@@ -127,7 +127,7 @@ Status: Mostly done.
 - Structured views exist: TTS Studio, Import, Library, Characters, Podcast, Settings.
 - Queue rows, diagnostics, import controls, TTS engine selection, output history, and startup snapshot exist.
 - Guided Start view, persistent Inspector, Calibre action guidance, TTS engine setup checklist, and queue action guidance exist.
-- `audio.cpp` upstream check shows update status.
+- `audio.cpp` upstream check shows update status at startup and on refresh.
 - Local engine diagnostics exist.
 - Settings persist in `.bookcast-workbench.json`.
 - Remaining: visual polish, smoother onboarding, better empty states, better grouped settings, and MediaEncoder-grade queue clarity.

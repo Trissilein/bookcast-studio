@@ -168,8 +168,9 @@ selected book preview, and outputs.
 
 ## audio.cpp
 
-BookCast treats `audio.cpp` as an external process. The Rust workbench can check
-the pinned upstream revision and shows `Update Available` if GitHub HEAD differs.
+BookCast treats `audio.cpp` as an external process. The Rust workbench checks
+the pinned upstream revision at startup and on `Check audio.cpp`, then shows
+`Update Available` if GitHub HEAD differs.
 The default Windows CLI path is:
 
 ```powershell

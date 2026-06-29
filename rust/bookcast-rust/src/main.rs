@@ -1086,7 +1086,8 @@ fn main() -> Result<(), slint::PlatformError> {
     refresh_readiness(app.as_weak());
 
     wire_callbacks(&app, state.clone());
-    schedule_startup_snapshot(app.as_weak(), state);
+    schedule_startup_snapshot(app.as_weak(), state.clone());
+    schedule_startup_audio_cpp_check(app.as_weak(), state.repo_root.clone());
     app.run()
 }
 
@@ -1104,6 +1105,12 @@ fn schedule_startup_snapshot(weak: slint::Weak<AppWindow>, state: AppState) {
             "startup snapshot",
             startup_snapshot_args(&app),
         );
+    });
+}
+
+fn schedule_startup_audio_cpp_check(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
+    slint::Timer::single_shot(Duration::from_millis(900), move || {
+        refresh_audio_cpp(weak, repo_root, false);
     });
 }
 
@@ -1989,7 +1996,7 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
                 audio_cpp_health_args(&app),
             );
         }
-        refresh_audio_cpp(weak.clone(), refresh_state.repo_root.clone());
+        refresh_audio_cpp(weak.clone(), refresh_state.repo_root.clone(), true);
     });
 
     let weak = app.as_weak();
@@ -2172,8 +2179,12 @@ fn run_bridge(
     });
 }
 
-fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
-    set_status(weak.clone(), "Checking audio.cpp upstream...");
+fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf, announce: bool) {
+    if announce {
+        set_status(weak.clone(), "Checking audio.cpp upstream...");
+    } else {
+        set_audio_status(weak.clone(), "audio.cpp: checking upstream...");
+    }
     thread::spawn(move || {
         let pinned = AUDIO_CPP_PINNED.trim();
         let output = Command::new("git")
@@ -2187,7 +2198,9 @@ fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
                 let status = audio_cpp_update_status(pinned, remote);
                 set_audio_status(weak.clone(), &status);
                 push_log(weak.clone(), &status);
-                set_status(weak, "audio.cpp check completed.");
+                if announce {
+                    set_status(weak, "audio.cpp check completed.");
+                }
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -2201,12 +2214,16 @@ fn refresh_audio_cpp(weak: slint::Weak<AppWindow>, repo_root: PathBuf) {
                         detail
                     },
                 );
-                set_status(weak, "audio.cpp check failed.");
+                if announce {
+                    set_status(weak, "audio.cpp check failed.");
+                }
             }
             Err(error) => {
                 set_audio_status(weak.clone(), "audio.cpp: git not available");
                 push_log(weak.clone(), &format!("audio.cpp check failed: {error}"));
-                set_status(weak, "audio.cpp check failed.");
+                if announce {
+                    set_status(weak, "audio.cpp check failed.");
+                }
             }
         }
     });
