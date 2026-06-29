@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 58 Python tests, 29 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 60 Python tests, 29 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -162,6 +162,6 @@ Status: Partial.
 - One real `audio.cpp` setup renders a sample and a short chapter.
 - Queue remains readable during long render.
 - Cancel/retry works during long render.
-- Missing dependency errors explain exact fix.
+- Missing `ffmpeg`/`ffprobe` errors explain exact install/PATH/full-path fix.
 - Interface can be used without copying IDs manually.
 - User can understand next safe action from screen state alone.

@@ -151,21 +151,24 @@ def assemble_m4b(
 
 
 def probe_duration(path: Path, ffprobe: str = "ffprobe") -> float:
-    proc = subprocess.run(
-        [
-            ffprobe,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        proc = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(_missing_tool_message("ffprobe", ffprobe)) from exc
     if proc.returncode != 0:
         detail = proc.stderr.strip() or proc.stdout.strip()
         raise RuntimeError(f"ffprobe duration failed: {detail}")
@@ -205,10 +208,20 @@ def _ffmetadata(chapters: list[tuple[str, float]]) -> str:
 
 
 def _run_ffmpeg(args: list[str]) -> None:
-    proc = subprocess.run(args, check=False, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(args, check=False, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(_missing_tool_message("ffmpeg", args[0] if args else "ffmpeg")) from exc
     if proc.returncode != 0:
         detail = proc.stderr.strip() or proc.stdout.strip()
         raise RuntimeError(f"ffmpeg assembly failed: {detail}")
+
+
+def _missing_tool_message(tool: str, configured: str) -> str:
+    return (
+        f"{tool} not found: {configured}. Install ffmpeg and add it to PATH, "
+        f"or configure the full path to {tool}.exe."
+    )
 
 
 def _ffmpeg_path(path: Path) -> str:
@@ -217,4 +230,3 @@ def _ffmpeg_path(path: Path) -> str:
 
 def _escape_metadata(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\n", "\\n").replace("=", "\\=")
-
