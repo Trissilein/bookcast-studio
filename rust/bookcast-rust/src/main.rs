@@ -1024,6 +1024,8 @@ struct JobState {
     status: String,
     progress: u8,
     detail: String,
+    started_ms: u64,
+    updated_ms: u64,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -3248,10 +3250,8 @@ fn create_job(
     progress: u8,
     detail: &str,
 ) -> u64 {
-    let id = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0);
+    let now = now_ms();
+    let id = now;
     {
         let mut jobs = jobs.lock().expect("jobs lock");
         jobs.push(JobState {
@@ -3260,6 +3260,8 @@ fn create_job(
             status: status.to_string(),
             progress,
             detail: detail.to_string(),
+            started_ms: now,
+            updated_ms: now,
         });
     }
     render_queue(weak, jobs);
@@ -3275,11 +3277,13 @@ fn update_job(
     detail: &str,
 ) {
     {
+        let now = now_ms();
         let mut jobs = jobs.lock().expect("jobs lock");
         if let Some(job) = jobs.iter_mut().find(|job| job.id == id) {
             job.status = status.to_string();
             job.progress = progress;
             job.detail = detail.to_string();
+            job.updated_ms = now;
         }
     }
     render_queue(weak, jobs);
@@ -3292,9 +3296,11 @@ fn update_job_detail(
     detail: &str,
 ) {
     {
+        let now = now_ms();
         let mut jobs = jobs.lock().expect("jobs lock");
         if let Some(job) = jobs.iter_mut().find(|job| job.id == id) {
             job.detail = detail.to_string();
+            job.updated_ms = now;
         }
     }
     render_queue(weak, jobs);
@@ -3314,11 +3320,13 @@ fn mark_latest_running_job_cancelled(
     detail: &str,
 ) -> bool {
     let changed = {
+        let now = now_ms();
         let mut jobs = jobs.lock().expect("jobs lock");
         if let Some(job) = jobs.iter_mut().rev().find(|job| job.status == "running") {
             job.status = "cancelled".to_string();
             job.progress = 100;
             job.detail = detail.to_string();
+            job.updated_ms = now;
             true
         } else {
             false
@@ -3383,8 +3391,11 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
 fn queue_summary(jobs: &[JobState]) -> String {
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
         return format!(
-            "Running: {} at {}% | {}",
-            job.label, job.progress, job.detail
+            "Running: {} at {}% after {} | {}",
+            job.label,
+            job.progress,
+            elapsed_label(job),
+            job.detail
         );
     }
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
@@ -3447,6 +3458,24 @@ fn progress_bar(progress: u8) -> String {
     format!("[{}{}]", "#".repeat(filled), "-".repeat(10 - filled))
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn elapsed_label(job: &JobState) -> String {
+    format_elapsed_ms(job.updated_ms.saturating_sub(job.started_ms))
+}
+
+fn format_elapsed_ms(ms: u64) -> String {
+    let seconds = ms / 1000;
+    let minutes = seconds / 60;
+    let seconds = seconds % 60;
+    format!("{minutes:02}:{seconds:02}")
+}
+
 fn job_status_label(status: &str) -> &str {
     match status {
         "queued" => "Queued",
@@ -3460,11 +3489,12 @@ fn job_status_label(status: &str) -> &str {
 
 fn job_queue_line(job: &JobState) -> String {
     format!(
-        "{} {:>3}%  {}  {}\n  id #{:05}  {}",
+        "{} {:>3}%  {}  {}  elapsed {}\n  id #{:05}  {}",
         progress_bar(job.progress),
         job.progress.min(100),
         job_status_label(&job.status),
         job.label,
+        elapsed_label(job),
         job.id % 100000,
         job.detail
     )
@@ -5178,6 +5208,7 @@ mod tests {
     use super::character_voice_template;
     use super::confirmed_voice_entries_from;
     use super::engine_setup_text_from;
+    use super::format_elapsed_ms;
     use super::import_done_detail;
     use super::job_progress_detail;
     use super::job_queue_line;
@@ -5652,6 +5683,8 @@ mod tests {
                 status: "done".to_string(),
                 progress: 100,
                 detail: "book-1".to_string(),
+                started_ms: 1_000,
+                updated_ms: 2_000,
             },
             JobState {
                 id: 2,
@@ -5659,11 +5692,13 @@ mod tests {
                 status: "running".to_string(),
                 progress: 42,
                 detail: "tts 2/5 rendered".to_string(),
+                started_ms: 1_000,
+                updated_ms: 76_000,
             },
         ];
         assert_eq!(
             queue_summary(&jobs),
-            "Running: render at 42% | tts 2/5 rendered"
+            "Running: render at 42% after 01:15 | tts 2/5 rendered"
         );
         assert_eq!(
             queue_action(&jobs),
@@ -5676,6 +5711,8 @@ mod tests {
             status: "failed".to_string(),
             progress: 100,
             detail: "metadata.db missing".to_string(),
+            started_ms: 1_000,
+            updated_ms: 2_000,
         }];
         assert_eq!(
             queue_summary(&failed),
@@ -5692,6 +5729,8 @@ mod tests {
             status: "cancelled".to_string(),
             progress: 100,
             detail: "Cancel sent to process 123".to_string(),
+            started_ms: 1_000,
+            updated_ms: 2_000,
         }];
         assert_eq!(
             queue_summary(&cancelled),
@@ -5711,6 +5750,8 @@ mod tests {
             status: "done".to_string(),
             progress: 100,
             detail: "D:\\out\\book.opus".to_string(),
+            started_ms: 1_000,
+            updated_ms: 2_000,
         }];
 
         assert_eq!(
@@ -5731,13 +5772,16 @@ mod tests {
             status: "running".to_string(),
             progress: 42,
             detail: "tts 2/5 rendered".to_string(),
+            started_ms: 1_000,
+            updated_ms: 76_000,
         };
 
         assert_eq!(progress_bar(42), "[####------]");
         assert_eq!(progress_bar(100), "[##########]");
+        assert_eq!(format_elapsed_ms(75_000), "01:15");
         assert_eq!(
             job_queue_line(&job),
-            "[####------]  42%  Running  render\n  id #23456  tts 2/5 rendered"
+            "[####------]  42%  Running  render  elapsed 01:15\n  id #23456  tts 2/5 rendered"
         );
     }
 

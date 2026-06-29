@@ -53,7 +53,8 @@ TTS Studio shows a render plan and blocks obvious bad jobs before they hit the
 Python bridge: missing book id, unsupported output format, missing Piper exe, or
 missing `audio.cpp` executable/model.
 Render jobs emit chunk/turn-level progress for TTS and assembly so the queue can
-show where long audiobook or podcast renders currently are.
+show where long audiobook or podcast renders currently are; queue cards also
+show elapsed time for long-running jobs.
 The header shows the next safe action from current book, engine-check, output,
 and queue state; the queue footer highlights the active or failed job before the
 raw job log.
