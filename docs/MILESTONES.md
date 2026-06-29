@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed with Python tests, Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 50 Python tests, 27 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -92,8 +92,8 @@ Status: Partial / usable prototype.
 - Rust views expose static podcast generation and render.
 - Rust Podcast view shows speaker/turn review guidance and requires confirmed `speaker=voice` mappings.
 - Podcast render can reuse a saved reviewed script JSON instead of regenerating through Ollama.
-- Rust Podcast view can browse, open, open folder for, and reload reviewed script JSON.
-- Remaining: in-app script text editor, better source citation display, better prompt controls, and real smoke tests with user-selected models.
+- Rust Podcast view can browse, open, open folder for, reload, edit, validate, and save reviewed script JSON.
+- Remaining: better source citation display, better prompt controls, and real smoke tests with user-selected models.
 
 ## M6 Interactive Podcast
 
@@ -135,6 +135,7 @@ Status: Partial.
 - Queue action guidance exists.
 - Render sample before full render exists.
 - Native Browse buttons exist for important paths.
+- Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Startup restores saved library snapshot.
 - Remaining: final visual design, stronger error recovery, and less technical engine terminology.
 

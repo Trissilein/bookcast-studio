@@ -56,6 +56,7 @@ export component AppWindow inherits Window {
     in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
     in-out property <string> podcast-review-text: "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render.";
     in-out property <string> podcast-script-path: "";
+    in-out property <string> podcast-script-json: "";
     in-out property <string> ollama-url: "http://127.0.0.1:11434";
     in-out property <string> ollama-model: "qwen3:8b";
     in-out property <string> speaker-voice-map: "host=; explainer=; skeptic=";
@@ -112,6 +113,8 @@ export component AppWindow inherits Window {
     callback open-podcast-script();
     callback open-podcast-script-folder();
     callback reload-podcast-script();
+    callback validate-podcast-script();
+    callback save-podcast-script();
     callback discover-voices();
     callback load-outputs();
     callback open-output();
@@ -744,8 +747,15 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 Button { text: "Browse Script"; clicked => { root.browse-podcast-script(); } }
                                 Button { text: "Reload Script"; clicked => { root.reload-podcast-script(); } }
+                                Button { text: "Validate Editor"; clicked => { root.validate-podcast-script(); } }
+                                Button { text: "Save Script"; clicked => { root.save-podcast-script(); } }
                                 Button { text: "Open Script"; clicked => { root.open-podcast-script(); } }
                                 Button { text: "Open Folder"; clicked => { root.open-podcast-script-folder(); } }
+                            }
+                            Text { text: "Reviewed script JSON"; color: rgb(89, 99, 93); }
+                            TextEdit {
+                                height: 170px;
+                                text <=> root.podcast-script-json;
                             }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -1517,6 +1527,37 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    app.on_validate_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        match validate_podcast_script_json(&app.get_podcast_script_json().to_string()) {
+            Ok(script) => {
+                app.set_podcast_text(podcast_script_preview_text(&script).into());
+                app.set_podcast_review_text(
+                    podcast_review_text(&script, Some(&app.get_podcast_script_path().to_string()))
+                        .into(),
+                );
+                app.set_status_text("Podcast script JSON is valid.".into());
+                app.set_guide_text(
+                    "Script valid. Save it, confirm voices, then Render Podcast.".into(),
+                );
+            }
+            Err(error) => {
+                app.set_status_text(format!("Podcast script JSON invalid: {error}").into());
+                app.set_guide_text("Fix script JSON before saving or rendering.".into());
+            }
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_save_podcast_script(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Err(error) = save_podcast_script_editor(&app) {
+            app.set_status_text(error.clone().into());
+            app.set_guide_text(error.into());
+        }
+    });
+
+    let weak = app.as_weak();
     app.on_open_podcast_script(move || {
         let Some(app) = weak.upgrade() else { return };
         let path = app.get_podcast_script_path().to_string();
@@ -2154,14 +2195,48 @@ fn load_podcast_script_preview(app: &AppWindow, path: &str, seed_voice_map: bool
         app.set_status_text(format!("Podcast script is not valid JSON: {trimmed}").into());
         return;
     };
+    let pretty = serde_json::to_string_pretty(&script).unwrap_or(raw);
     let speaker_template = podcast_speaker_template(&script);
     if seed_voice_map && !speaker_template.is_empty() {
         app.set_speaker_voice_map(speaker_template.into());
         app.set_speaker_voices_confirmed(false);
     }
+    app.set_podcast_script_json(pretty.into());
     app.set_podcast_text(podcast_script_preview_text(&script).into());
     app.set_podcast_review_text(podcast_review_text(&script, Some(trimmed)).into());
     app.set_status_text("Podcast script preview loaded.".into());
+}
+
+fn validate_podcast_script_json(raw: &str) -> Result<Value, String> {
+    let script: Value = serde_json::from_str(raw.trim()).map_err(|error| error.to_string())?;
+    if !script
+        .get("turns")
+        .and_then(Value::as_array)
+        .is_some_and(|turns| !turns.is_empty())
+    {
+        return Err("script needs a non-empty turns array".to_string());
+    }
+    Ok(script)
+}
+
+fn save_podcast_script_editor(app: &AppWindow) -> Result<(), String> {
+    let path = app.get_podcast_script_path().to_string();
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Set Reviewed script path before saving script JSON.".to_string());
+    }
+    let script = validate_podcast_script_json(&app.get_podcast_script_json().to_string())?;
+    let pretty = serde_json::to_string_pretty(&script).map_err(|error| error.to_string())?;
+    std::fs::write(trimmed, &pretty)
+        .map_err(|error| format!("Podcast script save failed: {error}"))?;
+    app.set_podcast_script_json(pretty.into());
+    app.set_podcast_text(podcast_script_preview_text(&script).into());
+    app.set_podcast_review_text(podcast_review_text(&script, Some(trimmed)).into());
+    app.set_status_text("Podcast script saved.".into());
+    app.set_guide_text(
+        "Saved reviewed script. Confirm speaker voices, then Render Podcast.".into(),
+    );
+    Ok(())
 }
 
 fn python_invocation(repo_root: &Path) -> (String, Vec<String>) {
@@ -4276,6 +4351,9 @@ fn handle_bridge_events(
                 let script = value.get("script").unwrap_or(&Value::Null);
                 let speaker_template = podcast_speaker_template(script);
                 set_podcast_text(weak.clone(), &podcast_script_preview_text(script));
+                if let Ok(pretty) = serde_json::to_string_pretty(script) {
+                    set_podcast_script_json(weak.clone(), &pretty);
+                }
                 if let Some(path) = value.get("path").and_then(Value::as_str) {
                     if !speaker_template.is_empty() {
                         set_speaker_voice_map(weak.clone(), &speaker_template);
@@ -4482,6 +4560,15 @@ fn set_podcast_script_path(weak: slint::Weak<AppWindow>, text: &str) {
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(app) = weak.upgrade() {
             app.set_podcast_script_path(text.into());
+        }
+    });
+}
+
+fn set_podcast_script_json(weak: slint::Weak<AppWindow>, text: &str) {
+    let text = text.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_podcast_script_json(text.into());
         }
     });
 }
@@ -4732,6 +4819,7 @@ mod tests {
     use super::source_probe_summary;
     use super::split_ids;
     use super::tts_test_preflight_problem_from;
+    use super::validate_podcast_script_json;
     use super::workbench_readiness;
     use super::JobState;
 
@@ -5069,6 +5157,21 @@ mod tests {
         assert!(preview.contains("Saved Cast"));
         assert!(preview.contains("Speakers: host, expert"));
         assert!(preview.contains("expert: Details."));
+    }
+
+    #[test]
+    fn podcast_script_editor_requires_valid_turns() {
+        assert!(validate_podcast_script_json(
+            r#"{"speakers":["host"],"turns":[{"speaker":"host","text":"Hi."}]}"#
+        )
+        .is_ok());
+        assert_eq!(
+            validate_podcast_script_json(r#"{"speakers":["host"],"turns":[]}"#).unwrap_err(),
+            "script needs a non-empty turns array"
+        );
+        assert!(validate_podcast_script_json("not json")
+            .unwrap_err()
+            .contains("expected ident"));
     }
 
     #[test]
