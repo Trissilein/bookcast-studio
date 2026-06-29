@@ -117,8 +117,9 @@ Fast smoke without packaging:
 .\.venv\Scripts\python .\scripts\acceptance_smoke.py
 ```
 
-The smoke imports a TXT source, renders sample + full Opus through Windows SAPI,
-checks output registration, and validates rendered audio duration with `ffprobe`.
+The smoke imports a generated German EPUB, renders sample + full Opus + M4B
+through Windows SAPI, checks output registration, and validates rendered audio
+duration plus M4B chapter marks with `ffprobe`.
 If the local Trispr-Flow Piper install exists, it also renders a Piper sample.
 The UI launch smoke starts the packaged desktop app briefly and fails if it exits
 early.

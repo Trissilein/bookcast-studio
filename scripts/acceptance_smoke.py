@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -23,14 +24,21 @@ def main() -> int:
     repo = Path(__file__).resolve().parents[1]
     temp_dir = Path(tempfile.mkdtemp(prefix="bookcast-acceptance-"))
     library = args.library or temp_dir / "library"
-    source = temp_dir / "Ada Author - Acceptance Smoke.txt"
-    source.write_text(
-        "Chapter 1\n"
-        "Chapter one starts here. This is a short acceptance sample.\n\n"
-        "Second paragraph exists so cleanup and chunking have real input.\n\n"
-        "Chapter 2\n"
-        "The second chapter is short, but it must create a real M4B chapter mark.",
-        encoding="utf-8",
+    source = temp_dir / "Ada Autor - Akzeptanz Rauchtest.epub"
+    write_acceptance_epub(
+        source,
+        title="Akzeptanz Rauchtest",
+        author="Ada Autor",
+        chapters=[
+            (
+                "Kapitel Eins",
+                "Das erste Kapitel beginnt hier. Dies ist ein kurzer deutscher EPUB-Rauchtest.",
+            ),
+            (
+                "Kapitel Zwei",
+                "Das zweite Kapitel ist kurz, muss aber eine echte M4B-Kapitelmarke erzeugen.",
+            ),
+        ],
     )
 
     try:
@@ -50,7 +58,7 @@ def main() -> int:
         book_id = str(first_event(imported, "job_done")["book_id"])
 
         preview = first_event(imported, "book_preview")
-        require("Chapter one starts here" in str(preview.get("preview", "")), "Import preview missing expected text")
+        require("Das erste Kapitel beginnt" in str(preview.get("preview", "")), "Import preview missing expected text")
 
         if not args.skip_render:
             sample = run_bridge(
@@ -142,6 +150,82 @@ def run_bridge(repo: Path, args: list[str]) -> list[dict[str, object]]:
     events = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     require(events, f"Bridge command emitted no events: {' '.join(args)}")
     return events
+
+
+def write_acceptance_epub(path: Path, *, title: str, author: str, chapters: list[tuple[str, str]]) -> None:
+    manifest_items = "\n".join(
+        f'<item id="c{index}" href="text/chapter{index}.xhtml" media-type="application/xhtml+xml"/>'
+        for index, _chapter in enumerate(chapters, start=1)
+    )
+    spine_items = "\n".join(f'<itemref idref="c{index}"/>' for index, _chapter in enumerate(chapters, start=1))
+    nav_points = "\n".join(
+        f"""
+        <navPoint id="navPoint-{index}" playOrder="{index}">
+          <navLabel><text>{xml_escape(chapter_title)}</text></navLabel>
+          <content src="text/chapter{index}.xhtml"/>
+        </navPoint>"""
+        for index, (chapter_title, _chapter_text) in enumerate(chapters, start=1)
+    )
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("mimetype", "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        zf.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>""",
+        )
+        zf.writestr(
+            "OEBPS/content.opf",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">bookcast-acceptance</dc:identifier>
+    <dc:title>{xml_escape(title)}</dc:title>
+    <dc:creator>{xml_escape(author)}</dc:creator>
+    <dc:language>de</dc:language>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    {manifest_items}
+  </manifest>
+  <spine toc="ncx">
+    {spine_items}
+  </spine>
+</package>""",
+        )
+        zf.writestr(
+            "OEBPS/toc.ncx",
+            f"""<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="bookcast-acceptance"/></head>
+  <docTitle><text>{xml_escape(title)}</text></docTitle>
+  <navMap>{nav_points}
+  </navMap>
+</ncx>""",
+        )
+        for index, (chapter_title, chapter_text) in enumerate(chapters, start=1):
+            zf.writestr(
+                f"OEBPS/text/chapter{index}.xhtml",
+                f"""<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <body>
+    <h1>{xml_escape(chapter_title)}</h1>
+    <p>{xml_escape(chapter_text)}</p>
+  </body>
+</html>""",
+            )
+
+
+def xml_escape(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def python(repo: Path) -> str:

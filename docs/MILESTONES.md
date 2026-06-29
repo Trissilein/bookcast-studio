@@ -80,7 +80,7 @@ Status: Mostly done.
 - Audiobook render can use confirmed `speaker=voice` mappings for chunks that start with `Speaker:`.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
 - Synthetic long-render stress covers many chunks, progress, assemble, and cache resume behavior.
-- Acceptance smoke renders Opus plus M4B and verifies chapter marks through `ffprobe`.
+- Acceptance smoke imports a generated German EPUB, renders Opus plus M4B, and verifies chapter marks through `ffprobe`.
 - Remaining: validate real `audio.cpp` model/family combinations end-to-end and stress-test real full-book renders.
 
 ## M4 Voices + Characters
