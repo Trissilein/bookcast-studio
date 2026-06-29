@@ -50,7 +50,16 @@ def test_pdf_extract(tmp_path: Path) -> None:
 
 def test_epub_extracts_metadata_and_chapters(tmp_path: Path) -> None:
     source = tmp_path / "sample.epub"
-    _write_epub(source)
+    _write_epub(
+        source,
+        title="Sample Book",
+        author="Ada Author",
+        language="en",
+        chapters=[
+            ("Start", "First chapter text."),
+            ("Next", "Second chapter text."),
+        ],
+    )
 
     document = extract(source)
 
@@ -62,7 +71,46 @@ def test_epub_extracts_metadata_and_chapters(tmp_path: Path) -> None:
     assert "First chapter text" in document.raw_text
 
 
-def _write_epub(path: Path) -> None:
+def test_golden_epub_samples_cover_german_and_english_metadata(tmp_path: Path) -> None:
+    samples = [
+        (
+            "de",
+            "Der große Anfang",
+            "Erika Mustermann",
+            [("Kapitel Eins", "Grüße aus München & Überblick."), ("Zweites Kapitel", "Noch ein deutscher Absatz.")],
+        ),
+        (
+            "en",
+            "The Small Voyage",
+            "John Writer",
+            [("Opening", "A clean English paragraph."), ("Landing", "Another chapter follows.")],
+        ),
+    ]
+
+    for language, title, author, chapters in samples:
+        source = tmp_path / f"{language}.epub"
+        _write_epub(source, title=title, author=author, language=language, chapters=chapters)
+
+        metadata = probe(source)
+        document = extract(source)
+
+        assert metadata.title == title
+        assert metadata.author == author
+        assert metadata.language == language
+        assert document.metadata.title == title
+        assert document.metadata.author == author
+        assert document.metadata.language == language
+        assert [chapter.title for chapter in document.chapters] == [chapter[0] for chapter in chapters]
+        assert chapters[0][1].replace("&", "&") in document.raw_text
+
+
+def _write_epub(path: Path, *, title: str, author: str, language: str, chapters: list[tuple[str, str]]) -> None:
+    manifest_items = "\n".join(
+        f'<item id="c{index}" href="text/chapter{index}.xhtml" media-type="application/xhtml+xml"/>'
+        for index, _chapter in enumerate(chapters, start=1)
+    )
+    spine_items = "\n".join(f'<itemref idref="c{index}"/>' for index, _chapter in enumerate(chapters, start=1))
+
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("mimetype", "application/epub+zip")
         zf.writestr(
@@ -77,26 +125,31 @@ def _write_epub(path: Path) -> None:
         )
         zf.writestr(
             "OEBPS/content.opf",
-            """<?xml version="1.0" encoding="UTF-8"?>
+            f"""<?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
               <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                <dc:title>Sample Book</dc:title>
-                <dc:creator>Ada Author</dc:creator>
-                <dc:language>en</dc:language>
+                <dc:title>{_xml_escape(title)}</dc:title>
+                <dc:creator>{_xml_escape(author)}</dc:creator>
+                <dc:language>{_xml_escape(language)}</dc:language>
               </metadata>
               <manifest>
-                <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
-                <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+                {manifest_items}
               </manifest>
               <spine>
-                <itemref idref="c1"/>
-                <itemref idref="c2"/>
+                {spine_items}
               </spine>
             </package>
             """,
         )
-        zf.writestr("OEBPS/chapter1.xhtml", "<html><body><h1>Start</h1><p>First chapter text.</p></body></html>")
-        zf.writestr("OEBPS/chapter2.xhtml", "<html><body><h1>Next</h1><p>Second chapter text.</p></body></html>")
+        for index, (chapter_title, chapter_text) in enumerate(chapters, start=1):
+            zf.writestr(
+                f"OEBPS/text/chapter{index}.xhtml",
+                f"<html><body><h1>{_xml_escape(chapter_title)}</h1><p>{_xml_escape(chapter_text)}</p></body></html>",
+            )
+
+
+def _xml_escape(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _write_docx(path: Path, paragraphs: list[str]) -> None:
