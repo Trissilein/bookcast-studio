@@ -31,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     render_parser.add_argument("--library", type=Path, required=True)
     render_parser.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     render_parser.add_argument("--voice", default=None)
+    render_parser.add_argument("--speaker-voice", action="append", default=[], help="Speaker=Voice mapping for chunks starting with Speaker:")
+    render_parser.add_argument("--confirm-speaker-voices", action="store_true", help="Confirm reviewed audiobook speaker=voice mappings")
     render_parser.add_argument("--rate", type=int, default=0)
     render_parser.add_argument("--limit", type=int, default=None, help="Render only the first N chunks")
     render_parser.add_argument("--ffmpeg", default="ffmpeg")
@@ -269,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
     bridge_render.add_argument("--library", type=Path, required=True)
     bridge_render.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     bridge_render.add_argument("--voice", default=None)
+    bridge_render.add_argument("--speaker-voice", action="append", default=[])
+    bridge_render.add_argument("--confirm-speaker-voices", action="store_true")
     bridge_render.add_argument("--rate", type=int, default=0)
     bridge_render.add_argument("--limit", type=int, default=None)
     bridge_render.add_argument("--ffmpeg", default="ffmpeg")
@@ -286,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     bridge_sample.add_argument("--library", type=Path, required=True)
     bridge_sample.add_argument("--format", choices=["opus", "mp3", "wav", "m4b"], default="opus")
     bridge_sample.add_argument("--voice", default=None)
+    bridge_sample.add_argument("--speaker-voice", action="append", default=[])
+    bridge_sample.add_argument("--confirm-speaker-voices", action="store_true")
     bridge_sample.add_argument("--rate", type=int, default=0)
     bridge_sample.add_argument("--ffmpeg", default="ffmpeg")
     bridge_sample.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
@@ -453,6 +459,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.book_id,
                 args.format,
                 args.voice,
+                args.speaker_voice,
+                args.confirm_speaker_voices,
                 args.rate,
                 args.limit,
                 args.ffmpeg,
@@ -472,6 +480,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.book_id,
                 args.format,
                 args.voice,
+                args.speaker_voice,
+                args.confirm_speaker_voices,
                 args.rate,
                 args.ffmpeg,
                 args.provider,
@@ -543,6 +553,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_format=args.format,
                 provider=provider,
                 voice=args.voice,
+                voice_map=_optional_confirmed_voice_map(args.speaker_voice, args.confirm_speaker_voices),
                 rate=args.rate,
                 limit=args.limit,
                 ffmpeg=args.ffmpeg,
@@ -634,6 +645,13 @@ def _confirmed_voice_map(entries: list[str], confirmed: bool) -> dict[str, str]:
         raise SystemExit("Speaker voice mapping is required before podcast rendering")
     if not confirmed:
         raise SystemExit("Confirm speaker voices before rendering: pass --confirm-voices after checking speaker=voice mappings")
+    return mapping
+
+
+def _optional_confirmed_voice_map(entries: list[str], confirmed: bool) -> dict[str, str]:
+    mapping = _parse_voice_map(entries)
+    if mapping and not confirmed:
+        raise SystemExit("Confirm audiobook speaker voices before rendering: pass --confirm-speaker-voices after checking speaker=voice mappings")
     return mapping
 
 

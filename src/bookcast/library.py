@@ -533,6 +533,7 @@ class BookLibrary:
         rate: int = 0,
         ffmpeg: str = "ffmpeg",
         limit: int | None = None,
+        voice_map: dict[str, str] | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> Path:
         book = self.get_book(book_id)
@@ -551,20 +552,21 @@ class BookLibrary:
         chapter_rows = self.get_chapters(book_id)
         chapter_titles = {int(row["chapter_index"]): str(row["title"]) for row in chapter_rows}
         chunk_dir = self.root / "books" / book_id / "audio_chunks"
-        render_key = safe_name(f"{provider.id}_{voice or 'default'}_rate{rate}")[:80]
         rendered: list[Path] = []
         rendered_meta: list[tuple[int, Path]] = []
         total = len(chunks)
         if progress_callback:
             progress_callback({"phase": "tts", "progress": 10, "chunk": 0, "total": total})
         for index, chunk in enumerate(chunks, start=1):
+            selected_voice = _voice_for_text(str(chunk["text"]), voice, voice_map)
+            render_key = safe_name(f"{provider.id}_{selected_voice or 'default'}_rate{rate}")[:80]
             out_wav = chunk_dir / (
                 f"c{int(chunk['chapter_index']):04d}_{int(chunk['chunk_index']):04d}_"
                 f"{chunk['text_hash'][:12]}_{render_key}.wav"
             )
             cached = out_wav.exists() and out_wav.stat().st_size > 0
             if not cached:
-                provider.synthesize(str(chunk["text"]), out_wav, voice=voice, rate=rate)
+                provider.synthesize(str(chunk["text"]), out_wav, voice=selected_voice, rate=rate)
                 self._mark_chunk_rendered(str(chunk["id"]), out_wav)
             rendered.append(out_wav)
             rendered_meta.append((int(chunk["chapter_index"]), out_wav))
@@ -578,6 +580,7 @@ class BookLibrary:
                         "cached": cached,
                         "chapter_index": int(chunk["chapter_index"]),
                         "chunk_index": int(chunk["chunk_index"]),
+                        "voice": selected_voice or "",
                     }
                 )
 
@@ -704,6 +707,22 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _voice_for_text(text: str, default_voice: str | None, voice_map: dict[str, str] | None) -> str | None:
+    if not voice_map:
+        return default_voice
+    first_line = text.strip().splitlines()[0] if text.strip() else ""
+    first_line_lower = first_line.lower()
+    for speaker, speaker_voice in voice_map.items():
+        speaker = speaker.strip()
+        speaker_voice = speaker_voice.strip()
+        if not speaker or not speaker_voice:
+            continue
+        speaker_lower = speaker.lower()
+        if first_line_lower.startswith(f"{speaker_lower}:") or first_line_lower.startswith(f"{speaker_lower} -"):
+            return speaker_voice
+    return default_voice
 
 
 def safe_name(value: str) -> str:

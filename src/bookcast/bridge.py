@@ -656,6 +656,8 @@ def render_book(
     book_id: str,
     output_format: str = "opus",
     voice: str | None = None,
+    speaker_voice_entries: list[str] | None = None,
+    confirm_speaker_voices: bool = False,
     rate: int = 0,
     limit: int | None = None,
     ffmpeg: str = "ffmpeg",
@@ -669,6 +671,7 @@ def render_book(
     piper_model: str | None = None,
 ) -> int:
     emit("job_started", job="render", book_id=book_id, format=output_format, provider=provider)
+    voice_map = _optional_confirmed_voice_map(speaker_voice_entries or [], confirm_speaker_voices)
     library = BookLibrary(library_root)
     try:
         chunks = library.get_chunks(book_id)
@@ -688,6 +691,7 @@ def render_book(
             output_format=output_format,
             provider=tts_provider,
             voice=voice,
+            voice_map=voice_map,
             rate=rate,
             limit=limit,
             ffmpeg=ffmpeg,
@@ -707,6 +711,8 @@ def sample_render(
     book_id: str,
     output_format: str = "opus",
     voice: str | None = None,
+    speaker_voice_entries: list[str] | None = None,
+    confirm_speaker_voices: bool = False,
     rate: int = 0,
     ffmpeg: str = "ffmpeg",
     provider: str = "windows_sapi",
@@ -724,6 +730,8 @@ def sample_render(
         book_id,
         output_format=output_format,
         voice=voice,
+        speaker_voice_entries=speaker_voice_entries,
+        confirm_speaker_voices=confirm_speaker_voices,
         rate=rate,
         limit=1,
         ffmpeg=ffmpeg,
@@ -770,6 +778,27 @@ def _tts_provider(
             raise RuntimeError("Piper executable is required")
         return PiperProvider(executable, voice_dir=voice_dir, model=piper_model)
     return WindowsSapiProvider()
+
+
+def _parse_voice_map(entries: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for entry in entries:
+        if "=" not in entry:
+            raise RuntimeError(f"Invalid speaker voice mapping: {entry!r}; expected speaker=voice")
+        speaker, voice = entry.split("=", 1)
+        speaker = speaker.strip()
+        voice = voice.strip()
+        if not speaker or not voice:
+            raise RuntimeError(f"Invalid speaker voice mapping: {entry!r}; expected speaker=voice")
+        mapping[speaker] = voice
+    return mapping
+
+
+def _optional_confirmed_voice_map(entries: list[str], confirmed: bool) -> dict[str, str]:
+    mapping = _parse_voice_map(entries)
+    if mapping and not confirmed:
+        raise RuntimeError("Confirm speaker voices before audiobook rendering")
+    return mapping
 
 
 def _book_text(library_root: Path, book_id: str) -> str:

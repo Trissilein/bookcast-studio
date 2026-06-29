@@ -1780,6 +1780,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_engine_setup_text(engine_setup_text(&app).into());
             return;
         }
+        if let Err(problem) = optional_audiobook_speaker_voice_entries(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
         app.set_render_plan_text(render_plan_text(&app).into());
         let args = render_args(&app, "sample-render", book_id);
         run_bridge(app.as_weak(), sample_state.clone(), "sample render", args);
@@ -1801,6 +1806,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_status_text(problem.clone().into());
             app.set_guide_text(problem.into());
             app.set_render_plan_text(render_plan_text(&app).into());
+            return;
+        }
+        if let Err(problem) = optional_audiobook_speaker_voice_entries(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
             return;
         }
         app.set_render_plan_text(render_plan_text(&app).into());
@@ -2463,6 +2473,13 @@ fn confirmed_speaker_voice_entries(app: &AppWindow) -> Result<Vec<String>, Strin
     )
 }
 
+fn optional_audiobook_speaker_voice_entries(app: &AppWindow) -> Result<Vec<String>, String> {
+    optional_voice_entries_from(
+        &app.get_speaker_voice_map().to_string(),
+        app.get_speaker_voices_confirmed(),
+    )
+}
+
 fn confirmed_voice_entries_from(value: &str, confirmed: bool) -> Result<Vec<String>, String> {
     let entries = split_voice_map(value);
     if entries.is_empty() {
@@ -2471,6 +2488,20 @@ fn confirmed_voice_entries_from(value: &str, confirmed: bool) -> Result<Vec<Stri
     if !confirmed {
         return Err(
             "Review every speaker=voice assignment, then tick confirmation before rendering."
+                .to_string(),
+        );
+    }
+    Ok(entries)
+}
+
+fn optional_voice_entries_from(value: &str, confirmed: bool) -> Result<Vec<String>, String> {
+    let entries = split_voice_map(value);
+    if entries.is_empty() {
+        return Ok(entries);
+    }
+    if !confirmed {
+        return Err(
+            "Review character speaker=voice assignments and tick confirmation before multi-voice audiobook rendering."
                 .to_string(),
         );
     }
@@ -2702,8 +2733,19 @@ fn render_plan_text(app: &AppWindow) -> String {
     } else {
         voice
     };
+    let speaker_entries = split_voice_map(&app.get_speaker_voice_map().to_string());
+    let casting = if speaker_entries.is_empty() {
+        "single narrator".to_string()
+    } else if app.get_speaker_voices_confirmed() {
+        format!("{} confirmed speaker voice(s)", speaker_entries.len())
+    } else {
+        format!(
+            "{} speaker voice(s) pending confirmation",
+            speaker_entries.len()
+        )
+    };
     format!(
-        "Render plan: book {}, engine {engine}, voice {voice}, output {}, full render {limit}. Run sample first; full render uses same settings.",
+        "Render plan: book {}, engine {engine}, voice {voice}, casting {casting}, output {}, full render {limit}. Run sample first; full render uses same settings.",
         if book.trim().is_empty() { "(none)" } else { book.trim() },
         if output.trim().is_empty() { "opus" } else { output.trim() }
     )
@@ -2722,6 +2764,12 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     let voice = app.get_voice_name().to_string();
     if !voice.trim().is_empty() {
         args.extend(["--voice".into(), voice]);
+    }
+    for entry in optional_audiobook_speaker_voice_entries(app).unwrap_or_default() {
+        args.extend(["--speaker-voice".into(), entry]);
+    }
+    if app.get_speaker_voices_confirmed() {
+        args.push("--confirm-speaker-voices".into());
     }
     let limit = app.get_render_limit().to_string();
     if command == "render" && !limit.trim().is_empty() {
@@ -4942,6 +4990,7 @@ mod tests {
     use super::job_progress_detail;
     use super::job_queue_line;
     use super::optional_positive_limit_problem;
+    use super::optional_voice_entries_from;
     use super::output_open_target;
     use super::parse_chapter_index;
     use super::podcast_review_text;
@@ -5152,6 +5201,18 @@ mod tests {
         assert_eq!(
             confirmed_voice_entries_from("host=Narrator; explainer=Guest", true).unwrap(),
             vec!["host=Narrator".to_string(), "explainer=Guest".to_string()]
+        );
+        assert_eq!(
+            optional_voice_entries_from("", false).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            optional_voice_entries_from("Ada=Ada Voice", false).unwrap_err(),
+            "Review character speaker=voice assignments and tick confirmation before multi-voice audiobook rendering."
+        );
+        assert_eq!(
+            optional_voice_entries_from("Ada=Ada Voice", true).unwrap(),
+            vec!["Ada=Ada Voice".to_string()]
         );
     }
 

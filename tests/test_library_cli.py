@@ -175,6 +175,53 @@ def test_render_book_long_run_progress_and_resume_cache(tmp_path: Path, monkeypa
     assert all(event.get("cached") is True for event in second_progress if event.get("phase") == "tts" and event.get("chunk"))
 
 
+def test_render_book_uses_confirmed_speaker_voice_map_for_prefixed_chunks(tmp_path: Path, monkeypatch) -> None:
+    library_root = tmp_path / "library"
+    source = tmp_path / "Ada Author - Cast Book.txt"
+    source.write_text(
+        "Ada: First line.\n\nBob: Second line.\n\nNarrator: Third line.",
+        encoding="utf-8",
+    )
+
+    def fake_assemble(chunk_wavs, output_path, output_format, ffmpeg="ffmpeg", chapters=None):
+        output_path.write_bytes(b"audio")
+        return output_path
+
+    monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
+    provider = _RecordingTtsProvider()
+
+    library = BookLibrary(library_root)
+    try:
+        library.upsert_cleanup_profile(
+            "speaker-lines",
+            {
+                "max_chars": 30,
+                "join_hyphenated_lines": True,
+                "collapse_blank_lines": True,
+                "collapse_spaces": True,
+                "remove_soft_hyphens": True,
+                "strip_trailing_whitespace": True,
+                "trim": True,
+                "max_blank_lines": 2,
+            },
+        )
+        book_id = library.import_source(source, cleanup_profile="speaker-lines")
+        output = library.render_book(
+            book_id,
+            provider=provider,
+            voice="Narrator Voice",
+            voice_map={"Ada": "Ada Voice", "Bob": "Bob Voice"},
+            output_format="opus",
+        )
+        chunks = library.get_chunks(book_id)
+    finally:
+        library.close()
+
+    assert output.exists()
+    assert [voice for _, voice in provider.calls[:3]] == ["Ada Voice", "Bob Voice", "Narrator Voice"]
+    assert len({Path(chunk["audio_path"]).name for chunk in chunks}) == len(chunks)
+
+
 def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Audio Book.txt"

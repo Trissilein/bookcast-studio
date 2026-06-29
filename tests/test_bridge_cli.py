@@ -354,6 +354,23 @@ def test_bridge_book_preview_and_sample_render(tmp_path: Path, capsys, monkeypat
     assert output_events[0]["event"] == "outputs"
     assert output_events[0]["outputs"][0]["path"] == sample_events[-1]["output"]
 
+    result = main(
+        [
+            "bridge",
+            "sample-render",
+            book_id,
+            "--library",
+            str(library_root),
+            "--speaker-voice",
+            "Ada=Ada Voice",
+        ]
+    )
+    guard_events = _events(capsys.readouterr().out)
+
+    assert result == 1
+    assert guard_events[-1]["event"] == "error"
+    assert "Confirm speaker voices" in guard_events[-1]["message"]
+
 
 def test_bridge_startup_snapshot_emits_books_selected_preview_and_outputs(
     tmp_path: Path, capsys, monkeypatch

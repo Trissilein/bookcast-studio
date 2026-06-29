@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 51 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 52 Python tests, 28 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -69,6 +69,7 @@ Status: Mostly done.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
+- Audiobook render can use confirmed `speaker=voice` mappings for chunks that start with `Speaker:`.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
 - Synthetic long-render stress covers many chunks, progress, assemble, and cache resume behavior.
 - Remaining: validate real `audio.cpp` model/family combinations end-to-end and stress-test real full-book renders.
@@ -80,10 +81,11 @@ Status: Partial.
 - Narrator/speaker data model exists.
 - Ollama-assisted character suggestions exist.
 - Speaker-to-voice mappings exist.
-- Manual confirmation before multi-speaker render exists.
+- Manual confirmation before multi-speaker podcast and audiobook render exists.
 - Rust Characters view now seeds an editable `speaker=voice` review template from LLM candidates.
 - Rust Characters view shows confidence and excerpt fields when the LLM returns them.
-- Remaining: per-character audiobook casting flow and real-world tuning of confidence/excerpt quality.
+- Prefix-based per-character audiobook casting exists for reviewed `Speaker:` chunks.
+- Remaining: automatic dialogue attribution and real-world tuning of confidence/excerpt quality.
 
 ## M5 Static Podcast Generator
 
