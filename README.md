@@ -85,6 +85,8 @@ rechunk the book before rendering.
 Path fields for library, imports, Calibre, ffmpeg/ffprobe, Piper, and
 `audio.cpp` have native Browse buttons so first setup does not depend on manual
 Windows path typing.
+Settings are grouped into library/render defaults, media tools, voice engines,
+and AI/Ollama instead of one flat technical list.
 Calibre discovery checks PATH, common Windows install folders, portable/local
 app folders, Scoop, Chocolatey, and registry install locations before asking
 for a manual `calibredb.exe` path.

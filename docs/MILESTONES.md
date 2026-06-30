@@ -136,7 +136,8 @@ Status: Mostly done.
 - `audio.cpp` upstream check shows update status at startup and on refresh.
 - Local engine diagnostics exist.
 - Settings persist in `.bookcast-workbench.json`.
-- Remaining: visual polish, smoother onboarding, better empty states, better grouped settings, and MediaEncoder-grade queue clarity.
+- Settings view is grouped into library/render defaults, media tools, voice engines, and AI/Ollama.
+- Remaining: visual polish, smoother onboarding, better empty states, and MediaEncoder-grade queue clarity.
 
 ## Interface / UX Checklist
 
@@ -151,6 +152,7 @@ Status: Partial.
 - Character view exists.
 - Podcast view exists.
 - Settings view exists.
+- Settings view uses clear setup groups instead of one flat technical list.
 - Header guidance exists.
 - Queue summary exists.
 - Queue action guidance exists.

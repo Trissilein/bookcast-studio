@@ -876,6 +876,14 @@ export component AppWindow inherits Window {
                             spacing: 12px;
 
                             Text { text: "Settings"; font-size: 19px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Save paths and defaults here. Engine-specific fields stay available in TTS Studio for day-to-day rendering.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Library and render defaults"; font-size: 16px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Library root"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -895,6 +903,15 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.render-limit; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.voice-name; }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Media tools"; font-size: 16px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Leave empty when tools are in PATH. Set full paths only when BookCast cannot find them.";
+                                color: rgb(89, 99, 93);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                             Text { text: "ffmpeg executable (optional)"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -912,6 +929,15 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 LineEdit { text <=> root.calibredb-path; }
                                 Button { text: "Browse"; clicked => { root.browse-calibredb(); } }
+                            }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "Voice engines"; font-size: 16px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Windows voices need no setup. Piper and audio.cpp are optional local engines.";
+                                color: rgb(89, 99, 93);
+                                font-size: 12px;
+                                wrap: word-wrap;
                             }
                             Text { text: "audio.cpp executable"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
@@ -948,10 +974,20 @@ export component AppWindow inherits Window {
                                 font-size: 13px;
                                 wrap: word-wrap;
                             }
+
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
+                            Text { text: "AI / Ollama"; font-size: 16px; font-weight: 700; color: rgb(32, 36, 31); }
+                            Text {
+                                text: "Used for character suggestions and podcast scripts. Leave default if Ollama runs locally.";
+                                color: rgb(89, 99, 93);
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
                             Text { text: "Ollama URL"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.ollama-url; }
                             Text { text: "Ollama model"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.ollama-model; }
+                            Rectangle { height: 1px; background: rgb(228, 221, 204); }
                             Button { text: "Save Settings"; clicked => { root.save-settings(); } }
                         }
                     }
