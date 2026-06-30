@@ -17,7 +17,7 @@ export component AppWindow inherits Window {
 
     in-out property <string> library-path: "library";
     in-out property <string> source-path: "";
-    in-out property <string> source-probe-text: "No source probed yet.";
+    in-out property <string> source-probe-text: "No source probed yet. Choose a file/folder, then click Probe Source to preview before importing.";
     in-out property <string> calibre-path: "";
     in-out property <string> calibredb-path: "";
     in-out property <string> calibre-suggested-path: "";
@@ -25,17 +25,17 @@ export component AppWindow inherits Window {
     in-out property <string> calibre-ids: "";
     in-out property <string> calibre-limit: "50";
     in-out property <string> calibre-action-text: "Select a Calibre library folder, then click Diagnose Calibre.";
-    in-out property <string> calibre-preview-text: "No Calibre scan yet.";
+    in-out property <string> calibre-preview-text: "No Calibre scan yet. Choose a Calibre library, run Diagnose Calibre, then Scan Calibre.";
     in-out property <string> book-id: "";
     in-out property <string> voice-name: "";
-    in-out property <string> voice-list-text: "Discover voices before choosing one.";
+    in-out property <string> voice-list-text: "No voices loaded yet. Click Check Voice Engine or Discover Voices, then use First/Previous/Next Voice.";
     in-out property <string> output-format: "opus";
     in-out property <string> render-limit: "";
     in-out property <string> ffmpeg-path: "";
     in-out property <string> ffprobe-path: "";
     in-out property <string> tts-test-text: "BookCast engine test.";
     in-out property <string> last-output-path: "";
-    in-out property <string> output-list-text: "No outputs loaded.";
+    in-out property <string> output-list-text: "No outputs yet. Render TTS Test or Render Sample, then use Open File or Open Folder.";
     in-out property <string> audio-cpp-exe: "";
     in-out property <string> audio-cpp-model: "";
     in-out property <string> audio-cpp-backend: "cpu";
@@ -45,18 +45,18 @@ export component AppWindow inherits Window {
     in-out property <string> piper-voice-dir: "";
     in-out property <int> engine-index: 0;
     in-out property <string> status-text: "Ready";
-    in-out property <string> diagnostic-text: "Run diagnostics before importing.";
-    in-out property <string> books-text: "No books loaded.";
-    in-out property <string> book-selection-text: "Refresh Books to enable selection.";
-    in-out property <string> book-preview-text: "Select or import a book, then load preview.";
+    in-out property <string> diagnostic-text: "Diagnostics not run yet. Click Run Diagnostics on Start or Import before importing/rendering.";
+    in-out property <string> books-text: "No books in this BookCast library yet. Import a source file/folder or scan Calibre, then Refresh Books.";
+    in-out property <string> book-selection-text: "No book selected yet. Import a source or click Refresh Books after importing.";
+    in-out property <string> book-preview-text: "No preview yet. Select/import a book, then click Load Preview to inspect chapters and chunks.";
     in-out property <string> cleanup-profile-name: "standard";
     in-out property <string> cleanup-profiles-text: "Load cleanup profiles before changing chunking.";
     in-out property <string> chapter-edit-index: "0";
     in-out property <string> chapter-edit-title: "";
     in-out property <string> chapter-edit-text: "";
-    in-out property <string> character-text: "Run character extraction after loading a book preview. Ollama must be running.";
+    in-out property <string> character-text: "No character suggestions yet. Load a book preview, start Ollama, then click Suggest Characters.";
     in-out property <string> character-review-text: "Review checklist: run suggestions, delete false positives, assign voices, then tick confirmation.";
-    in-out property <string> podcast-text: "Generate a script first. Render only after speaker voices are mapped.";
+    in-out property <string> podcast-text: "No podcast script yet. Choose a mode/preset, generate script, review voices, then render.";
     in-out property <string> podcast-review-text: "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render.";
     in-out property <string> podcast-script-path: "";
     in-out property <string> podcast-script-json: "";
@@ -69,12 +69,12 @@ export component AppWindow inherits Window {
     in-out property <string> interactive-turns: "4";
     in-out property <string> interactive-seed-prompt: "";
     in-out property <int> podcast-mode-index: 0;
-    in-out property <string> queue-text: "Queue idle.";
+    in-out property <string> queue-text: "Queue idle. Start an import, engine check, TTS test, sample render, or full render.";
     in-out property <string> queue-summary: "No active jobs. Queue idle.";
     in-out property <string> queue-action-text: "Queue action: start an import, engine check, or render job.";
-    in-out property <string> guide-text: "Next: run diagnostics, import a source, then render from TTS Studio.";
+    in-out property <string> guide-text: "Next: run diagnostics, import a source or scan Calibre, then render from TTS Studio.";
     in-out property <string> setup-checklist-text: "[ ] Diagnostics\n[ ] Book selected\n[ ] Engine checked\n[ ] Sample rendered";
-    in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
+    in-out property <string> readiness-text: "Next: run diagnostics, import a source or scan Calibre, then render a sample.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
     in-out property <string> engine-check-text: "Engine check: not run. Click Check Voice Engine before rendering.";
     in-out property <string> engine-setup-text: "Voice engine setup: choose a voice engine, then click Check Voice Engine.";
@@ -4654,7 +4654,10 @@ fn handle_bridge_events(
                             .join("\n")
                     })
                     .filter(|text| !text.is_empty())
-                    .unwrap_or_else(|| "No outputs for this book yet.".to_string());
+                    .unwrap_or_else(|| {
+                        "No outputs for this book yet. Render TTS Test or Render Sample first."
+                            .to_string()
+                    });
                 set_output_list(weak.clone(), &outputs_text);
                 if let Some(path) = value
                     .get("outputs")
@@ -4759,7 +4762,10 @@ fn handle_bridge_events(
                             .collect::<Vec<_>>()
                             .join("\n")
                     })
-                    .unwrap_or_else(|| "No books loaded.".to_string());
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| {
+                        "No books in this BookCast library yet. Import a source file/folder or scan Calibre, then Refresh Books.".to_string()
+                    });
                 if let Some(first_id) = value
                     .get("books")
                     .and_then(Value::as_array)
@@ -4770,14 +4776,25 @@ fn handle_bridge_events(
                     set_book_id_if_empty(weak.clone(), first_id);
                 }
                 set_books(weak.clone(), &books);
-                set_book_selection(
-                    weak.clone(),
-                    &format!("{loaded_count} books loaded. Use Previous/Next Book to switch without copying IDs."),
-                );
-                set_guide(
-                    weak.clone(),
-                    "Books loaded. First book id is selected automatically if the field was empty.",
-                );
+                if loaded_count == 0 {
+                    set_book_selection(
+                        weak.clone(),
+                        "No books available yet. Import a source or scan/import Calibre first.",
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "No books found in this BookCast library. Open Import Wizard next.",
+                    );
+                } else {
+                    set_book_selection(
+                        weak.clone(),
+                        &format!("{loaded_count} books loaded. Use Previous/Next Book to switch without copying IDs."),
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "Books loaded. First book id is selected automatically if the field was empty.",
+                    );
+                }
             }
             Some("chapter_detail") => {
                 let index = value

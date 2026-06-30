@@ -71,6 +71,8 @@ inspection from each output view.
 The Rust queue runs one bridge job at a time so cancel targets the correct
 process. `Retry Last` repeats the previous bridge job after a failure or manual
 cancel.
+Empty states point to the next useful click for imports, books, previews,
+voices, outputs, characters, podcasts, and queue work.
 TTS Studio hides irrelevant engine fields: Windows SAPI shows no paths, Piper
 shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.

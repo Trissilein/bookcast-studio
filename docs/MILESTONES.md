@@ -137,7 +137,8 @@ Status: Mostly done.
 - Local engine diagnostics exist.
 - Settings persist in `.bookcast-workbench.json`.
 - Settings view is grouped into library/render defaults, media tools, voice engines, and AI/Ollama.
-- Remaining: visual polish, smoother onboarding, better empty states, and MediaEncoder-grade queue clarity.
+- Empty states point to the next useful action instead of generic blank text.
+- Remaining: visual polish, smoother onboarding, and MediaEncoder-grade queue clarity.
 
 ## Interface / UX Checklist
 
@@ -168,6 +169,7 @@ Status: Partial.
 - Podcast script preview shows source-backed citations when available.
 - Podcast prompt presets reduce blank-state setup for educational, controversial, and interview scripts.
 - Startup restores saved library snapshot.
+- Empty states explain the next click for imports, books, previews, voices, outputs, characters, podcasts, and queue work.
 - Manual test launcher prints a concrete beta pass checklist after preparing the library.
 - Remaining: final visual design and real-world error recovery polish.
 
