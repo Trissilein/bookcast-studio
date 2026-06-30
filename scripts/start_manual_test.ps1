@@ -3,7 +3,13 @@ param(
     [switch]$KeepExistingLibrary,
     [switch]$NoLaunch,
     [string]$CalibreLibrary = "",
-    [string]$CalibredbExe = ""
+    [string]$CalibredbExe = "",
+    [string]$FfmpegExe = "",
+    [string]$FfprobeExe = "",
+    [string]$AudioCppExe = "",
+    [string]$AudioCppModel = "",
+    [string]$AudioCppFamily = "",
+    [string]$AudioCppBackend = "cpu"
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +26,18 @@ if ($CalibreLibrary -and -not (Test-Path -LiteralPath $CalibreLibrary -PathType 
 }
 if ($CalibredbExe -and -not (Test-Path -LiteralPath $CalibredbExe -PathType Leaf)) {
     throw "calibredb executable not found: $CalibredbExe"
+}
+if ($FfmpegExe -and -not (Test-Path -LiteralPath $FfmpegExe -PathType Leaf)) {
+    throw "ffmpeg executable not found: $FfmpegExe"
+}
+if ($FfprobeExe -and -not (Test-Path -LiteralPath $FfprobeExe -PathType Leaf)) {
+    throw "ffprobe executable not found: $FfprobeExe"
+}
+if ($AudioCppExe -and -not (Test-Path -LiteralPath $AudioCppExe -PathType Leaf)) {
+    throw "audio.cpp executable not found: $AudioCppExe"
+}
+if ($AudioCppModel -and (($AudioCppModel -match '[\\/:]') -or ($AudioCppModel -match '\.(gguf|bin|onnx)$')) -and -not (Test-Path -LiteralPath $AudioCppModel -PathType Leaf)) {
+    throw "audio.cpp model file not found: $AudioCppModel"
 }
 
 if (-not $KeepExistingLibrary -and (Test-Path $Library)) {
@@ -65,14 +83,14 @@ $Workbench = [ordered]@{
     voice_name = ""
     output_format = "opus"
     render_limit = ""
-    ffmpeg_path = ""
-    ffprobe_path = ""
+    ffmpeg_path = [string]$FfmpegExe
+    ffprobe_path = [string]$FfprobeExe
     tts_test_text = "BookCast manual test."
     last_output_path = ""
-    audio_cpp_exe = ""
-    audio_cpp_model = ""
-    audio_cpp_backend = "cpu"
-    audio_cpp_family = ""
+    audio_cpp_exe = [string]$AudioCppExe
+    audio_cpp_model = [string]$AudioCppModel
+    audio_cpp_backend = [string]$AudioCppBackend
+    audio_cpp_family = [string]$AudioCppFamily
     piper_exe = ""
     piper_voice_dir = ""
     ollama_url = "http://127.0.0.1:11434"
@@ -84,7 +102,7 @@ $Workbench = [ordered]@{
     podcast_focus = ""
     podcast_style = ""
     podcast_mode_index = 0
-    engine_index = 0
+    engine_index = $(if ($AudioCppExe -or $AudioCppModel -or $AudioCppFamily) { 2 } else { 0 })
     current_view = 6
 }
 $Workbench | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $Settings -Encoding UTF8

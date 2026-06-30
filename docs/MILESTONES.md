@@ -74,6 +74,7 @@ Status: Mostly done.
 - Resumable chunk rendering exists.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
 - Rust settings can use custom `ffmpeg.exe` and `ffprobe.exe` paths for export and M4B chapter timing.
+- Manual test launcher can prefill ffmpeg/ffprobe and real `audio.cpp` engine paths.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime for long renders.

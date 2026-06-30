@@ -134,6 +134,12 @@ For a real Calibre pass, prefill the wizard:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1 -CalibreLibrary "D:\Books\Calibre Library" -CalibredbExe "C:\Program Files\Calibre2\calibredb.exe"
 ```
 
+For a real `audio.cpp` pass, prefill the engine setup:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1 -AudioCppExe "D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe" -AudioCppModel "D:\models\tts-model.gguf" -AudioCppFamily "pocket_tts"
+```
+
 On startup, the Rust workbench auto-loads the saved library snapshot: book list,
 selected book preview, and outputs.
 
