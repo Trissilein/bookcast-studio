@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-29 with 62 Python tests, 30 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-30 with 63 Python tests, 31 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -73,6 +73,7 @@ Status: Mostly done.
 - Render cache keys include provider, voice, rate, and engine options.
 - Resumable chunk rendering exists.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
+- Rust settings can use custom `ffmpeg.exe` and `ffprobe.exe` paths for export and M4B chapter timing.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime for long renders.
@@ -154,7 +155,7 @@ Status: Partial.
 - Cancelled jobs show a Retry Last recovery action.
 - Duplicate source imports are shown as reused duplicates in the queue/guide text.
 - Render sample before full render exists.
-- Native Browse buttons exist for important paths.
+- Native Browse buttons exist for important paths, including ffmpeg/ffprobe.
 - Discovered TTS voices can be selected with First/Previous/Next controls.
 - Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Podcast script preview shows source-backed citations when available.

@@ -13,6 +13,27 @@ def _events(output: str) -> list[dict[str, object]]:
     return [json.loads(line) for line in output.splitlines() if line.strip()]
 
 
+def test_bridge_diagnose_uses_configured_media_tool_paths(tmp_path: Path, capsys) -> None:
+    result = main(
+        [
+            "bridge",
+            "diagnose",
+            "--library",
+            str(tmp_path / "library"),
+            "--ffmpeg",
+            r"D:\Tools\ffmpeg.exe",
+            "--ffprobe",
+            r"D:\Tools\ffprobe.exe",
+        ]
+    )
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert events[0]["event"] == "diagnostic"
+    assert events[0]["ffmpeg"] == r"D:\Tools\ffmpeg.exe"
+    assert events[0]["ffprobe"] == r"D:\Tools\ffprobe.exe"
+
+
 def test_bridge_import_and_list_emit_jsonl(tmp_path: Path, capsys) -> None:
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Bridge Book.md"
@@ -735,7 +756,7 @@ def test_bridge_podcast_script_and_render_emit_jsonl(tmp_path: Path, capsys, mon
     monkeypatch.setattr("bookcast.bridge.OllamaProvider", FakeOllama)
     monkeypatch.setattr("bookcast.bridge.WindowsSapiProvider", FakeProvider)
     monkeypatch.setattr("bookcast.library.assemble_audio", fake_assemble)
-    monkeypatch.setattr("bookcast.library.probe_duration", lambda path: 1.0)
+    monkeypatch.setattr("bookcast.library.probe_duration", lambda path, ffprobe="ffprobe": 1.0)
 
     result = main(
         [

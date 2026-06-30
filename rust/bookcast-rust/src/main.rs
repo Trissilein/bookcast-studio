@@ -31,6 +31,8 @@ export component AppWindow inherits Window {
     in-out property <string> voice-list-text: "Discover voices before choosing one.";
     in-out property <string> output-format: "opus";
     in-out property <string> render-limit: "";
+    in-out property <string> ffmpeg-path: "";
+    in-out property <string> ffprobe-path: "";
     in-out property <string> tts-test-text: "BookCast engine test.";
     in-out property <string> last-output-path: "";
     in-out property <string> output-list-text: "No outputs loaded.";
@@ -86,6 +88,8 @@ export component AppWindow inherits Window {
     callback probe-source();
     callback browse-calibre();
     callback browse-calibredb();
+    callback browse-ffmpeg();
+    callback browse-ffprobe();
     callback browse-piper-exe();
     callback browse-piper-voice-dir();
     callback browse-audio-cpp-exe();
@@ -861,6 +865,18 @@ export component AppWindow inherits Window {
                             LineEdit { text <=> root.render-limit; }
                             Text { text: "Default voice"; color: rgb(89, 99, 93); }
                             LineEdit { text <=> root.voice-name; }
+                            Text { text: "ffmpeg executable (optional)"; color: rgb(89, 99, 93); }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.ffmpeg-path; }
+                                Button { text: "Browse"; clicked => { root.browse-ffmpeg(); } }
+                            }
+                            Text { text: "ffprobe executable (optional, needed for M4B chapters)"; color: rgb(89, 99, 93); }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                LineEdit { text <=> root.ffprobe-path; }
+                                Button { text: "Browse"; clicked => { root.browse-ffprobe(); } }
+                            }
                             Text { text: "calibredb executable (optional)"; color: rgb(89, 99, 93); }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -1041,6 +1057,8 @@ struct WorkbenchSettings {
     voice_name: String,
     output_format: String,
     render_limit: String,
+    ffmpeg_path: String,
+    ffprobe_path: String,
     tts_test_text: String,
     last_output_path: String,
     audio_cpp_exe: String,
@@ -1186,6 +1204,28 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    app.on_browse_ffmpeg(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose ffmpeg executable", &[("Executable", &["exe"])]) {
+            app.set_ffmpeg_path(path_to_string(&path).into());
+            app.set_status_text("ffmpeg executable selected.".into());
+            app.set_guide_text("ffmpeg path selected. Save Settings, then render again.".into());
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_browse_ffprobe(move || {
+        let Some(app) = weak.upgrade() else { return };
+        if let Some(path) = choose_file("Choose ffprobe executable", &[("Executable", &["exe"])]) {
+            app.set_ffprobe_path(path_to_string(&path).into());
+            app.set_status_text("ffprobe executable selected.".into());
+            app.set_guide_text(
+                "ffprobe path selected. Save Settings, then render M4B again.".into(),
+            );
+        }
+    });
+
+    let weak = app.as_weak();
     app.on_use_suggested_calibre(move || {
         let Some(app) = weak.upgrade() else { return };
         let suggested = app.get_calibre_suggested_path().to_string();
@@ -1277,17 +1317,19 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     app.on_diagnose(move || {
         let Some(app) = weak.upgrade() else { return };
         let library = app.get_library_path().to_string();
-        run_bridge(
-            app.as_weak(),
-            diagnose_state.clone(),
-            "diagnose",
-            vec![
-                "bridge".into(),
-                "diagnose".into(),
-                "--library".into(),
-                library,
-            ],
-        );
+        if let Some(problem) = media_tool_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
+        let mut args = vec![
+            "bridge".into(),
+            "diagnose".into(),
+            "--library".into(),
+            library,
+        ];
+        args.extend(media_tool_args(&app, true));
+        run_bridge(app.as_weak(), diagnose_state.clone(), "diagnose", args);
     });
 
     let weak = app.as_weak();
@@ -1942,6 +1984,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_guide_text(problem.into());
             return;
         }
+        if let Some(problem) = media_tool_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
+            app.set_guide_text(problem.into());
+            return;
+        }
         let args = podcast_render_args(&app, book_id);
         run_bridge(
             app.as_weak(),
@@ -1973,6 +2020,11 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
                 "Assign every speaker=voice pair and tick confirmation before interactive render."
                     .into(),
             );
+            app.set_guide_text(problem.into());
+            return;
+        }
+        if let Some(problem) = media_tool_path_problem(&app) {
+            app.set_status_text(problem.clone().into());
             app.set_guide_text(problem.into());
             return;
         }
@@ -2448,6 +2500,8 @@ fn load_settings(app: &AppWindow, repo_root: &Path) {
         app.set_output_format(settings.output_format.into());
     }
     app.set_render_limit(settings.render_limit.into());
+    app.set_ffmpeg_path(settings.ffmpeg_path.into());
+    app.set_ffprobe_path(settings.ffprobe_path.into());
     if !settings.tts_test_text.is_empty() {
         app.set_tts_test_text(settings.tts_test_text.into());
     }
@@ -2509,6 +2563,8 @@ fn save_settings(app: &AppWindow, repo_root: &Path) -> Result<PathBuf, String> {
         voice_name: app.get_voice_name().to_string(),
         output_format: app.get_output_format().to_string(),
         render_limit: app.get_render_limit().to_string(),
+        ffmpeg_path: app.get_ffmpeg_path().to_string(),
+        ffprobe_path: app.get_ffprobe_path().to_string(),
         tts_test_text: app.get_tts_test_text().to_string(),
         last_output_path: app.get_last_output_path().to_string(),
         audio_cpp_exe: app.get_audio_cpp_exe().to_string(),
@@ -2625,6 +2681,8 @@ fn render_preflight_problem(app: &AppWindow, book_id: &str) -> Option<String> {
     render_preflight_problem_from(
         book_id,
         &app.get_output_format().to_string(),
+        &app.get_ffmpeg_path().to_string(),
+        &app.get_ffprobe_path().to_string(),
         app.get_engine_index(),
         &app.get_piper_exe().to_string(),
         &app.get_voice_name().to_string(),
@@ -2682,6 +2740,20 @@ fn calibredb_path_problem(app: &AppWindow) -> Option<String> {
         return None;
     }
     path_like_file_problem("calibredb executable", &value)
+}
+
+fn media_tool_path_problem(app: &AppWindow) -> Option<String> {
+    for (label, value) in [
+        ("ffmpeg executable", app.get_ffmpeg_path().to_string()),
+        ("ffprobe executable", app.get_ffprobe_path().to_string()),
+    ] {
+        if !value.trim().is_empty() {
+            if let Some(problem) = path_like_file_problem(label, &value) {
+                return Some(problem);
+            }
+        }
+    }
+    None
 }
 
 fn parse_chapter_index(value: &str) -> Result<u32, String> {
@@ -2786,6 +2858,8 @@ fn tts_test_preflight_problem_from(
 fn render_preflight_problem_from(
     book_id: &str,
     output_format: &str,
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
     engine_index: i32,
     piper_exe: &str,
     piper_voice: &str,
@@ -2802,6 +2876,12 @@ fn render_preflight_problem_from(
         "opus" | "mp3" | "wav" | "m4b"
     ) {
         return Some("Output must be opus, mp3, wav, or m4b.".to_string());
+    }
+    if let Some(problem) = path_like_file_problem("ffmpeg executable", ffmpeg_path) {
+        return Some(problem);
+    }
+    if let Some(problem) = path_like_file_problem("ffprobe executable", ffprobe_path) {
+        return Some(problem);
     }
     if let Some(problem) = engine_check_problem_from(
         engine_index,
@@ -2879,6 +2959,7 @@ fn render_args(app: &AppWindow, command: &str, book_id: String) -> Vec<String> {
     if command == "render" && !limit.trim().is_empty() {
         args.extend(["--limit".into(), limit.trim().to_string()]);
     }
+    args.extend(media_tool_args(app, true));
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
     } else if app.get_engine_index() == 2 {
@@ -2944,6 +3025,7 @@ fn podcast_render_args(app: &AppWindow, book_id: String) -> Vec<String> {
     if !script_path.trim().is_empty() {
         args.extend(["--script-path".into(), script_path]);
     }
+    args.extend(media_tool_args(app, true));
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
     } else if app.get_engine_index() == 2 {
@@ -2993,6 +3075,7 @@ fn podcast_interactive_args(app: &AppWindow, book_id: String) -> Vec<String> {
     if app.get_speaker_voices_confirmed() {
         args.push("--confirm-voices".into());
     }
+    args.extend(media_tool_args(app, false));
     if app.get_engine_index() == 1 {
         args.extend(piper_args(app));
     } else if app.get_engine_index() == 2 {
@@ -3013,6 +3096,25 @@ fn podcast_interactive_args(app: &AppWindow, book_id: String) -> Vec<String> {
         if !family.trim().is_empty() {
             args.extend(["--audio-cpp-family".into(), family]);
         }
+    }
+    args
+}
+
+fn media_tool_args(app: &AppWindow, include_ffprobe: bool) -> Vec<String> {
+    media_tool_args_from(
+        &app.get_ffmpeg_path().to_string(),
+        &app.get_ffprobe_path().to_string(),
+        include_ffprobe,
+    )
+}
+
+fn media_tool_args_from(ffmpeg: &str, ffprobe: &str, include_ffprobe: bool) -> Vec<String> {
+    let mut args = Vec::new();
+    if !ffmpeg.trim().is_empty() {
+        args.extend(["--ffmpeg".to_string(), ffmpeg.trim().to_string()]);
+    }
+    if include_ffprobe && !ffprobe.trim().is_empty() {
+        args.extend(["--ffprobe".to_string(), ffprobe.trim().to_string()]);
     }
     args
 }
@@ -5212,6 +5314,7 @@ mod tests {
     use super::import_done_detail;
     use super::job_progress_detail;
     use super::job_queue_line;
+    use super::media_tool_args_from;
     use super::optional_positive_limit_problem;
     use super::optional_voice_entries_from;
     use super::output_open_target;
@@ -5238,7 +5341,7 @@ mod tests {
     #[test]
     fn render_preflight_requires_book_id() {
         assert_eq!(
-            render_preflight_problem_from("", "opus", 0, "", "", "", "", "", "").as_deref(),
+            render_preflight_problem_from("", "opus", "", "", 0, "", "", "", "", "", "").as_deref(),
             Some("Render needs a book id. Import a book or click Refresh Books.")
         );
     }
@@ -5246,7 +5349,8 @@ mod tests {
     #[test]
     fn render_preflight_rejects_unknown_output_format() {
         assert_eq!(
-            render_preflight_problem_from("book-1", "flac", 0, "", "", "", "", "", "").as_deref(),
+            render_preflight_problem_from("book-1", "flac", "", "", 0, "", "", "", "", "", "")
+                .as_deref(),
             Some("Output must be opus, mp3, wav, or m4b.")
         );
     }
@@ -5257,6 +5361,8 @@ mod tests {
             render_preflight_problem_from(
                 "book-1",
                 "opus",
+                "",
+                "",
                 2,
                 "",
                 "",
@@ -5317,6 +5423,42 @@ mod tests {
             render_preflight_problem_from(
                 "book-1",
                 "opus",
+                "D:\\missing\\ffmpeg.exe",
+                "",
+                0,
+                "",
+                "",
+                "",
+                "",
+                "",
+                ""
+            )
+            .as_deref(),
+            Some("ffmpeg executable path not found: D:\\missing\\ffmpeg.exe")
+        );
+        assert_eq!(
+            render_preflight_problem_from(
+                "book-1",
+                "m4b",
+                "",
+                "D:\\missing\\ffprobe.exe",
+                0,
+                "",
+                "",
+                "",
+                "",
+                "",
+                ""
+            )
+            .as_deref(),
+            Some("ffprobe executable path not found: D:\\missing\\ffprobe.exe")
+        );
+        assert_eq!(
+            render_preflight_problem_from(
+                "book-1",
+                "opus",
+                "",
+                "",
                 2,
                 "",
                 "",
@@ -5332,6 +5474,8 @@ mod tests {
             render_preflight_problem_from(
                 "book-1",
                 "opus",
+                "",
+                "",
                 2,
                 "",
                 "",
@@ -5347,6 +5491,8 @@ mod tests {
             render_preflight_problem_from(
                 "book-1",
                 "opus",
+                "",
+                "",
                 2,
                 "",
                 "",
@@ -5496,6 +5642,24 @@ mod tests {
     }
 
     #[test]
+    fn media_tool_args_pass_custom_ffmpeg_and_ffprobe_when_set() {
+        assert_eq!(media_tool_args_from("", "", true), Vec::<String>::new());
+        assert_eq!(
+            media_tool_args_from("D:\\Tools\\ffmpeg.exe", "D:\\Tools\\ffprobe.exe", true),
+            vec![
+                "--ffmpeg".to_string(),
+                "D:\\Tools\\ffmpeg.exe".to_string(),
+                "--ffprobe".to_string(),
+                "D:\\Tools\\ffprobe.exe".to_string()
+            ]
+        );
+        assert_eq!(
+            media_tool_args_from("D:\\Tools\\ffmpeg.exe", "D:\\Tools\\ffprobe.exe", false),
+            vec!["--ffmpeg".to_string(), "D:\\Tools\\ffmpeg.exe".to_string()]
+        );
+    }
+
+    #[test]
     fn calibre_action_text_names_next_safe_action() {
         assert!(calibre_action_text(true, "", "", "").contains("Scan Calibre"));
         assert!(
@@ -5634,7 +5798,7 @@ mod tests {
     #[test]
     fn render_preflight_accepts_configured_piper() {
         assert_eq!(
-            render_preflight_problem_from("book-1", "m4b", 1, "piper", "", "", "", "", ""),
+            render_preflight_problem_from("book-1", "m4b", "", "", 1, "piper", "", "", "", "", ""),
             None
         );
     }

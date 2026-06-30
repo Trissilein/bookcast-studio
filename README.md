@@ -82,8 +82,9 @@ The Library view can load cleanup profiles and apply one to the selected book;
 that rechunks the book and refreshes the preview before rendering.
 The Library view can also load one chapter, edit its title/text, then save and
 rechunk the book before rendering.
-Path fields for library, imports, Calibre, Piper, and `audio.cpp` have native
-Browse buttons so first setup does not depend on manual Windows path typing.
+Path fields for library, imports, Calibre, ffmpeg/ffprobe, Piper, and
+`audio.cpp` have native Browse buttons so first setup does not depend on manual
+Windows path typing.
 After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
 The Import Wizard uses the selected cleanup profile for both local and Calibre

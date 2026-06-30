@@ -548,6 +548,7 @@ class BookLibrary:
         voice: str | None = None,
         rate: int = 0,
         ffmpeg: str = "ffmpeg",
+        ffprobe: str = "ffprobe",
         limit: int | None = None,
         voice_map: dict[str, str] | None = None,
         progress_callback: ProgressCallback | None = None,
@@ -606,7 +607,7 @@ class BookLibrary:
         output_path = output_dir / output_name
         if progress_callback:
             progress_callback({"phase": "assemble", "progress": 92, "chunk": total, "total": total})
-        timeline = chapter_timeline(rendered_meta, chapter_titles) if output_format.lower() == "m4b" else None
+        timeline = chapter_timeline(rendered_meta, chapter_titles, ffprobe=ffprobe) if output_format.lower() == "m4b" else None
         assemble_kwargs = {"ffmpeg": ffmpeg}
         if timeline is not None:
             assemble_kwargs["chapters"] = timeline
@@ -623,6 +624,7 @@ class BookLibrary:
         provider: TtsProvider | None = None,
         voice_map: dict[str, str] | None = None,
         ffmpeg: str = "ffmpeg",
+        ffprobe: str = "ffprobe",
         rate: int = 0,
         progress_callback: ProgressCallback | None = None,
     ) -> Path:
@@ -663,7 +665,7 @@ class BookLibrary:
                 provider.synthesize(turn.text, out_wav, voice=voice_name, rate=rate)
             rendered.append(out_wav)
             chapter_marks.append((turn.speaker, elapsed))
-            elapsed += probe_duration(out_wav)
+            elapsed += probe_duration(out_wav, ffprobe=ffprobe)
             if progress_callback:
                 progress_callback(
                     {

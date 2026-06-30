@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     render_parser.add_argument("--rate", type=int, default=0)
     render_parser.add_argument("--limit", type=int, default=None, help="Render only the first N chunks")
     render_parser.add_argument("--ffmpeg", default="ffmpeg")
+    render_parser.add_argument("--ffprobe", default="ffprobe")
     render_parser.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     render_parser.add_argument("--audio-cpp-exe", default=None)
     render_parser.add_argument("--audio-cpp-model", default=None)
@@ -73,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     podcast_render.add_argument("--model", default="qwen3:8b")
     podcast_render.add_argument("--ffmpeg", default="ffmpeg")
+    podcast_render.add_argument("--ffprobe", default="ffprobe")
 
     podcast_interactive = podcast_sub.add_parser("interactive", help="Run a live interactive podcast session")
     podcast_interactive.add_argument("book_id")
@@ -112,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
 
     bridge_diagnose = bridge_sub.add_parser("diagnose", help="Emit local tool diagnostics as JSONL")
     bridge_diagnose.add_argument("--library", type=Path, required=True)
+    bridge_diagnose.add_argument("--ffmpeg", default=None)
+    bridge_diagnose.add_argument("--ffprobe", default=None)
 
     bridge_voices = bridge_sub.add_parser("voices", help="Emit TTS voices as JSONL")
     bridge_voices.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
@@ -204,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_podcast_render.add_argument("--confirm-voices", action="store_true", help="Confirm reviewed speaker=voice mappings")
     bridge_podcast_render.add_argument("--rate", type=int, default=0)
     bridge_podcast_render.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_podcast_render.add_argument("--ffprobe", default="ffprobe")
     bridge_podcast_render.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     bridge_podcast_render.add_argument("--model", default="qwen3:8b")
     bridge_podcast_render.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
@@ -276,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_render.add_argument("--rate", type=int, default=0)
     bridge_render.add_argument("--limit", type=int, default=None)
     bridge_render.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_render.add_argument("--ffprobe", default="ffprobe")
     bridge_render.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_render.add_argument("--audio-cpp-exe", default=None)
     bridge_render.add_argument("--audio-cpp-model", default=None)
@@ -294,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
     bridge_sample.add_argument("--confirm-speaker-voices", action="store_true")
     bridge_sample.add_argument("--rate", type=int, default=0)
     bridge_sample.add_argument("--ffmpeg", default="ffmpeg")
+    bridge_sample.add_argument("--ffprobe", default="ffprobe")
     bridge_sample.add_argument("--provider", choices=["windows_sapi", "piper", "audio_cpp"], default="windows_sapi")
     bridge_sample.add_argument("--audio-cpp-exe", default=None)
     bridge_sample.add_argument("--audio-cpp-model", default=None)
@@ -306,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "bridge":
         if args.bridge_command == "diagnose":
-            return bridge.run_safely(bridge.diagnose, args.library)
+            return bridge.run_safely(bridge.diagnose, args.library, args.ffmpeg, args.ffprobe)
         if args.bridge_command == "voices":
             return bridge.run_safely(
                 bridge.voices,
@@ -396,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.confirm_voices,
                 args.rate,
                 args.ffmpeg,
+                args.ffprobe,
                 args.ollama_url,
                 args.model,
                 args.provider,
@@ -464,6 +472,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.rate,
                 args.limit,
                 args.ffmpeg,
+                args.ffprobe,
                 args.provider,
                 args.audio_cpp_exe,
                 args.audio_cpp_model,
@@ -484,6 +493,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.confirm_speaker_voices,
                 args.rate,
                 args.ffmpeg,
+                args.ffprobe,
                 args.provider,
                 args.audio_cpp_exe,
                 args.audio_cpp_model,
@@ -557,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
                 rate=args.rate,
                 limit=args.limit,
                 ffmpeg=args.ffmpeg,
+                ffprobe=args.ffprobe,
             )
         finally:
             library.close()
@@ -597,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_format=args.format,
                     voice_map=voice_map,
                     ffmpeg=args.ffmpeg,
+                    ffprobe=args.ffprobe,
                     rate=args.rate,
                 )
                 print(f"Rendered podcast {output}")

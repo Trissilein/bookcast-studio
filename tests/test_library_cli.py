@@ -293,7 +293,8 @@ def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
 
     chapter_calls: list[tuple[list[tuple[int, Path]], dict[int, str]]] = []
 
-    def fake_chapter_timeline(rendered_chunks, chapter_titles):
+    def fake_chapter_timeline(rendered_chunks, chapter_titles, ffprobe="ffprobe"):
+        assert ffprobe == "custom-ffprobe.exe"
         chapter_calls.append((rendered_chunks, chapter_titles))
         return [("Chapter 1", 0.0)]
 
@@ -309,7 +310,12 @@ def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:
     library = BookLibrary(library_root)
     try:
         book_id = library.import_source(source)
-        output = library.render_book(book_id, provider=_FakeTtsProvider(), output_format="m4b")
+        output = library.render_book(
+            book_id,
+            provider=_FakeTtsProvider(),
+            output_format="m4b",
+            ffprobe="custom-ffprobe.exe",
+        )
     finally:
         library.close()
 

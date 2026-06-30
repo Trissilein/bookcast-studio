@@ -26,14 +26,14 @@ def emit(event: str, **payload: Any) -> None:
     print(json.dumps({"event": event, **payload}, ensure_ascii=False), flush=True)
 
 
-def diagnose(library_root: Path) -> int:
+def diagnose(library_root: Path, ffmpeg: str | None = None, ffprobe: str | None = None) -> int:
     tts = WindowsSapiProvider()
     piper = PiperProvider(str(DEFAULT_PIPER_EXE), voice_dir=str(DEFAULT_PIPER_VOICE_DIR))
     emit(
         "diagnostic",
         library=str(library_root),
-        ffmpeg=shutil.which("ffmpeg"),
-        ffprobe=shutil.which("ffprobe"),
+        ffmpeg=_configured_tool(ffmpeg, "ffmpeg"),
+        ffprobe=_configured_tool(ffprobe, "ffprobe"),
         calibredb=find_calibredb(),
         windows_sapi=tts.health(),
         piper=piper.health() if DEFAULT_PIPER_EXE.exists() else False,
@@ -42,6 +42,12 @@ def diagnose(library_root: Path) -> int:
         audio_cpp_executable=str(DEFAULT_AUDIO_CPP_EXE) if DEFAULT_AUDIO_CPP_EXE.exists() else "",
     )
     return 0
+
+
+def _configured_tool(configured: str | None, fallback: str) -> str | None:
+    if configured and configured.strip():
+        return configured.strip()
+    return shutil.which(fallback)
 
 
 def voices(
@@ -340,6 +346,7 @@ def podcast_render(
     confirm_voices: bool = False,
     rate: int = 0,
     ffmpeg: str = "ffmpeg",
+    ffprobe: str = "ffprobe",
     ollama_url: str = "http://127.0.0.1:11434",
     model: str = "qwen3:8b",
     provider: str = "windows_sapi",
@@ -393,6 +400,7 @@ def podcast_render(
             provider=tts_provider,
             voice_map=voice_map,
             ffmpeg=ffmpeg,
+            ffprobe=ffprobe,
             rate=rate,
             progress_callback=lambda payload: emit("job_progress", job="podcast_render", **payload),
         )
@@ -665,6 +673,7 @@ def render_book(
     rate: int = 0,
     limit: int | None = None,
     ffmpeg: str = "ffmpeg",
+    ffprobe: str = "ffprobe",
     provider: str = "windows_sapi",
     audio_cpp_exe: str | None = None,
     audio_cpp_model: str | None = None,
@@ -699,6 +708,7 @@ def render_book(
             rate=rate,
             limit=limit,
             ffmpeg=ffmpeg,
+            ffprobe=ffprobe,
             progress_callback=lambda payload: emit("job_progress", job="render", **payload),
         )
         outputs_payload = library.list_outputs(book_id)
@@ -719,6 +729,7 @@ def sample_render(
     confirm_speaker_voices: bool = False,
     rate: int = 0,
     ffmpeg: str = "ffmpeg",
+    ffprobe: str = "ffprobe",
     provider: str = "windows_sapi",
     audio_cpp_exe: str | None = None,
     audio_cpp_model: str | None = None,
@@ -739,6 +750,7 @@ def sample_render(
         rate=rate,
         limit=1,
         ffmpeg=ffmpeg,
+        ffprobe=ffprobe,
         provider=provider,
         audio_cpp_exe=audio_cpp_exe,
         audio_cpp_model=audio_cpp_model,
