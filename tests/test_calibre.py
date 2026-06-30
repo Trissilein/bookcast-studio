@@ -4,7 +4,12 @@ import json
 import zipfile
 from pathlib import Path
 
-from bookcast.calibre import CalibreBook, diagnose_calibre_library, parse_calibre_list
+from bookcast.calibre import (
+    CalibreBook,
+    _calibredb_candidate_paths,
+    diagnose_calibre_library,
+    parse_calibre_list,
+)
 from bookcast.library import BookLibrary
 
 
@@ -40,6 +45,22 @@ def test_calibre_preferred_format_uses_existing_extractors_before_pdf() -> None:
     book = CalibreBook(id="8", title="Mixed", authors="Ada Author", formats=("PDF", "DOCX", "TXT"))
 
     assert book.preferred_format() == "DOCX"
+
+
+def test_calibredb_candidate_paths_cover_common_windows_installs() -> None:
+    paths = _calibredb_candidate_paths(
+        {
+            "ProgramFiles": "C:/Program Files",
+            "LOCALAPPDATA": "C:/Users/Ada/AppData/Local",
+            "USERPROFILE": "C:/Users/Ada",
+            "ChocolateyInstall": "C:/ProgramData/chocolatey",
+        }
+    )
+
+    assert Path("C:/Program Files/Calibre2/calibredb.exe") in paths
+    assert Path("C:/Users/Ada/AppData/Local/Programs/Calibre2/calibredb.exe") in paths
+    assert Path("C:/Users/Ada/scoop/apps/calibre/current/calibredb.exe") in paths
+    assert Path("C:/ProgramData/chocolatey/bin/calibredb.exe") in paths
 
 
 def test_calibre_import_uses_external_id_for_dedupe(tmp_path: Path) -> None:

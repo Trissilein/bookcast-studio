@@ -85,6 +85,9 @@ rechunk the book before rendering.
 Path fields for library, imports, Calibre, ffmpeg/ffprobe, Piper, and
 `audio.cpp` have native Browse buttons so first setup does not depend on manual
 Windows path typing.
+Calibre discovery checks PATH, common Windows install folders, portable/local
+app folders, Scoop, Chocolatey, and registry install locations before asking
+for a manual `calibredb.exe` path.
 After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
 The Import Wizard uses the selected cleanup profile for both local and Calibre
@@ -209,6 +212,8 @@ BookCast reads Calibre through the official `calibredb` CLI and copies exported
 files into its own library. It does not write back to Calibre.
 The Rust Import Wizard diagnoses wrong folders, missing `metadata.db`, missing
 `calibredb`, and locked/unreadable libraries before scanning.
+It searches PATH, common Windows install folders, portable/local app folders,
+Scoop, Chocolatey, and registry install locations for `calibredb.exe`.
 It exposes this as an explicit `Diagnose Calibre` step before `Scan Calibre`.
 Calibre scan/import can be limited from the wizard, defaulting to 50 books, so
 large libraries can be tested in bounded batches.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -229,14 +230,61 @@ def find_calibredb() -> str | None:
     found = shutil.which("calibredb")
     if found:
         return found
-    candidates = [
-        Path("C:/Program Files/Calibre2/calibredb.exe"),
-        Path("C:/Program Files (x86)/Calibre2/calibredb.exe"),
-    ]
-    for candidate in candidates:
+    for candidate in [*_calibredb_registry_paths(), *_calibredb_candidate_paths(os.environ)]:
         if candidate.exists():
             return str(candidate)
     return None
+
+
+def _calibredb_candidate_paths(environ: dict[str, str]) -> list[Path]:
+    raw_bases = [
+        environ.get("ProgramFiles", "C:/Program Files"),
+        environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"),
+        environ.get("LOCALAPPDATA", ""),
+        environ.get("APPDATA", ""),
+        environ.get("USERPROFILE", ""),
+        environ.get("ChocolateyInstall", ""),
+    ]
+    bases = [Path(base) for base in raw_bases if base]
+    candidates: list[Path] = []
+    for base in bases:
+        candidates.extend(
+            [
+                base / "Calibre2" / "calibredb.exe",
+                base / "calibre" / "calibredb.exe",
+                base / "Programs" / "Calibre2" / "calibredb.exe",
+                base / "Programs" / "calibre" / "calibredb.exe",
+                base / "scoop" / "apps" / "calibre" / "current" / "calibredb.exe",
+                base / "bin" / "calibredb.exe",
+            ]
+        )
+    return list(dict.fromkeys(candidates))
+
+
+def _calibredb_registry_paths() -> list[Path]:
+    try:
+        import winreg  # type: ignore[import-not-found]
+    except ImportError:
+        return []
+
+    paths: list[Path] = []
+    roots = [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]
+    keys = [
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\calibre",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Calibre2",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\calibre",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Calibre2",
+    ]
+    for root in roots:
+        for key in keys:
+            try:
+                with winreg.OpenKey(root, key) as handle:
+                    install_location, _ = winreg.QueryValueEx(handle, "InstallLocation")
+            except OSError:
+                continue
+            if install_location:
+                paths.append(Path(str(install_location)) / "calibredb.exe")
+    return list(dict.fromkeys(paths))
 
 
 def parse_calibre_list(output: str) -> list[CalibreBook]:
