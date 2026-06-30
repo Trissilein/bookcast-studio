@@ -77,6 +77,7 @@ Status: Mostly done.
 - Rust settings can use custom `ffmpeg.exe` and `ffprobe.exe` paths for export and M4B chapter timing.
 - Manual test launcher can prefill ffmpeg/ffprobe and real `audio.cpp` engine paths.
 - Beta readiness report marks synthetic readiness, real Calibre readiness, and real `audio.cpp` readiness as OK/TODO/BLOCKED.
+- Beta readiness report lists local `audio.cpp` TTS families and blocks invalid configured families in strict mode.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime and ETA for long renders.

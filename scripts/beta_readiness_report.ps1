@@ -49,6 +49,47 @@ function Write-Check {
     "{0,-8} {1,-24} {2}" -f $Status, $Name, $Detail | Write-Host
 }
 
+function Get-AudioCppFamilies {
+    param([string]$Executable)
+    if (-not $Executable) {
+        return @()
+    }
+    try {
+        $Output = & $Executable --help --task tts 2>&1
+    } catch {
+        return @()
+    }
+    $Families = @()
+    $InFamilies = $false
+    foreach ($Line in $Output) {
+        $Text = [string]$Line
+        if ($Text -match 'Registered families:') {
+            $InFamilies = $true
+            continue
+        }
+        if ($InFamilies) {
+            $Name = $Text.Trim()
+            if (-not $Name) {
+                continue
+            }
+            if ($Name -match '^[a-zA-Z0-9_]+$') {
+                $Families += $Name
+            }
+        }
+    }
+    return $Families
+}
+
+function Get-PreferredAudioCppFamily {
+    param([string[]]$Families)
+    foreach ($Name in @("pocket_tts", "qwen3_tts", "miotts", "chatterbox")) {
+        if ($Families -contains $Name) {
+            return $Name
+        }
+    }
+    return ""
+}
+
 $Exe = Join-Path $Repo "dist\bookcast-studio-windows\bookcast-studio.exe"
 $Library = Join-Path $Repo ".manual-test\library"
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
@@ -60,6 +101,8 @@ $Calibredb = Resolve-ToolPath "calibredb" $CalibredbExe @(
 )
 $DefaultAudioCpp = "D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe"
 $AudioCpp = Resolve-ToolPath "audiocpp_cli" $AudioCppExe @($DefaultAudioCpp)
+$AudioCppFamilies = Get-AudioCppFamilies $AudioCpp
+$SuggestedAudioCppFamily = Get-PreferredAudioCppFamily $AudioCppFamilies
 
 Write-Host ""
 Write-Host "BookCast beta readiness report"
@@ -117,6 +160,11 @@ if ($Calibredb) {
 
 if ($AudioCpp) {
     Write-Check "OK" "audio.cpp exe" $AudioCpp
+    if ($AudioCppFamilies.Count -gt 0) {
+        Write-Check "OK" "audio.cpp families" ($AudioCppFamilies -join ", ")
+    } else {
+        Write-Check "WARN" "audio.cpp families" "Could not read TTS families from --help --task tts."
+    }
 } else {
     Write-Check "TODO" "audio.cpp exe" "Not found. Build audio.cpp or pass -AudioCppExe."
 }
@@ -133,9 +181,17 @@ if ($AudioCppModel) {
 }
 
 if ($AudioCppFamily) {
-    Write-Check "OK" "audio.cpp family" "$AudioCppFamily on $AudioCppBackend"
+    if (($AudioCppFamilies.Count -gt 0) -and -not ($AudioCppFamilies -contains $AudioCppFamily)) {
+        Write-Check "BLOCKED" "audio.cpp family" "$AudioCppFamily not reported by audiocpp_cli. Available: $($AudioCppFamilies -join ', ')" $true
+    } else {
+        Write-Check "OK" "audio.cpp family" "$AudioCppFamily on $AudioCppBackend"
+    }
 } else {
-    Write-Check "TODO" "audio.cpp family" "Not supplied. Example: pocket_tts or qwen3_tts."
+    if ($SuggestedAudioCppFamily) {
+        Write-Check "TODO" "audio.cpp family" "Not supplied. Suggested from local CLI: $SuggestedAudioCppFamily."
+    } else {
+        Write-Check "TODO" "audio.cpp family" "Not supplied. Example: pocket_tts or qwen3_tts."
+    }
 }
 
 Write-Host ""
