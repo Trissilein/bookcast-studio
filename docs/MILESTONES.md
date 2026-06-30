@@ -161,6 +161,7 @@ Status: Partial.
 - Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Podcast script preview shows source-backed citations when available.
 - Startup restores saved library snapshot.
+- Manual test launcher prints a concrete beta pass checklist after preparing the library.
 - Remaining: final visual design, stronger error recovery, and less technical engine terminology.
 
 ## Current Definition Of Done Before Beta

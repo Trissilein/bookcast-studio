@@ -118,6 +118,18 @@ Write-Host $Smoke.library
 Write-Host "Book id:"
 Write-Host $Smoke.book_id
 Write-Host ""
+Write-Host "Manual test checklist:"
+Write-Host "1. Start view: run Diagnose, verify ffmpeg/ffprobe and Windows SAPI or selected engine."
+Write-Host "2. TTS Studio: click Check Engine, then Render TTS Test."
+Write-Host "3. TTS Studio: Render Sample, play output with Open File."
+Write-Host "4. TTS Studio: set output to M4B, Add Render Job, verify chapters with Open Folder."
+Write-Host "5. Import: if Calibre was prefilled, Diagnose Calibre, Scan Calibre, Import selected IDs."
+if ($AudioCppExe -or $AudioCppModel -or $AudioCppFamily) {
+    Write-Host "6. audio.cpp: Check audio.cpp, render a sample, then render a short chapter/full book."
+} else {
+    Write-Host "6. Optional audio.cpp: restart this script with -AudioCppExe/-AudioCppModel/-AudioCppFamily."
+}
+Write-Host ""
 if ($NoLaunch) {
     Write-Host "Launch skipped because -NoLaunch was set."
     return

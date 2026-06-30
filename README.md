@@ -143,6 +143,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.
 On startup, the Rust workbench auto-loads the saved library snapshot: book list,
 selected book preview, and outputs.
 
+Manual beta pass checklist:
+
+1. Start view: run Diagnose.
+2. TTS Studio: Check Engine, then Render TTS Test.
+3. Render Sample and play it with Open File.
+4. Render M4B and inspect the output folder.
+5. If Calibre is configured: Diagnose Calibre, Scan Calibre, Import selected IDs.
+6. If audio.cpp is configured: Check audio.cpp, render a sample, then render a short chapter/full book.
+
 ## Import From CLI
 
 ```powershell
