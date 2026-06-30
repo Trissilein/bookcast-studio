@@ -130,6 +130,20 @@ if ($AudioCppExe -or $AudioCppModel -or $AudioCppFamily) {
     Write-Host "6. Optional audio.cpp: restart this script with -AudioCppExe/-AudioCppModel/-AudioCppFamily."
 }
 Write-Host ""
+$ReportArgs = @("-NoProfile", "-ExecutionPolicy", "BYPASS", "-File", (Join-Path $PSScriptRoot "beta_readiness_report.ps1"))
+if ($CalibreLibrary) { $ReportArgs += @("-CalibreLibrary", $CalibreLibrary) }
+if ($CalibredbExe) { $ReportArgs += @("-CalibredbExe", $CalibredbExe) }
+if ($FfmpegExe) { $ReportArgs += @("-FfmpegExe", $FfmpegExe) }
+if ($FfprobeExe) { $ReportArgs += @("-FfprobeExe", $FfprobeExe) }
+if ($AudioCppExe) { $ReportArgs += @("-AudioCppExe", $AudioCppExe) }
+if ($AudioCppModel) { $ReportArgs += @("-AudioCppModel", $AudioCppModel) }
+if ($AudioCppFamily) { $ReportArgs += @("-AudioCppFamily", $AudioCppFamily) }
+if ($AudioCppBackend) { $ReportArgs += @("-AudioCppBackend", $AudioCppBackend) }
+& powershell @ReportArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Beta readiness report failed with exit code $LASTEXITCODE"
+}
+Write-Host ""
 if ($NoLaunch) {
     Write-Host "Launch skipped because -NoLaunch was set."
     return

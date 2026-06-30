@@ -76,6 +76,7 @@ Status: Mostly done.
 - ffmpeg assembly to Opus, MP3, WAV, and M4B exists.
 - Rust settings can use custom `ffmpeg.exe` and `ffprobe.exe` paths for export and M4B chapter timing.
 - Manual test launcher can prefill ffmpeg/ffprobe and real `audio.cpp` engine paths.
+- Beta readiness report marks synthetic readiness, real Calibre readiness, and real `audio.cpp` readiness as OK/TODO/BLOCKED.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime and ETA for long renders.
@@ -177,6 +178,7 @@ Status: Partial.
 - Startup restores saved library snapshot.
 - Empty states explain the next click for imports, books, previews, voices, outputs, characters, podcasts, and queue work.
 - Manual test launcher prints a concrete beta pass checklist after preparing the library.
+- Manual test launcher prints a beta readiness report for local blockers/TODOs.
 - Remaining: final visual design and real-world error recovery polish.
 
 ## Current Definition Of Done Before Beta

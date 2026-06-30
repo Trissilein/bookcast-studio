@@ -117,6 +117,7 @@ Packaged Windows build:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\readiness_check.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\beta_readiness_report.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\ui_launch_smoke.ps1
@@ -137,8 +138,11 @@ The UI launch smoke starts the packaged desktop app briefly and fails if it exit
 early.
 `readiness_check.ps1` runs the full build, acceptance smoke, UI launch smoke, and
 prints the packaged executable path for manual testing.
+`beta_readiness_report.ps1` prints OK/TODO/BLOCKED status for the packaged app,
+synthetic library, ffmpeg/ffprobe, real Calibre, and real `audio.cpp` setup.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
-workbench at that book, and launches the desktop app for hands-on testing.
+workbench at that book, prints the beta readiness report, and launches the
+desktop app for hands-on testing.
 For a real Calibre pass, prefill the wizard:
 
 ```powershell
