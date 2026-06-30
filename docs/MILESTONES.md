@@ -138,7 +138,8 @@ Status: Mostly done.
 - Settings persist in `.bookcast-workbench.json`.
 - Settings view is grouped into library/render defaults, media tools, voice engines, and AI/Ollama.
 - Empty states point to the next useful action instead of generic blank text.
-- Remaining: visual polish, smoother onboarding, and MediaEncoder-grade queue clarity.
+- Start view includes a fast-path checklist and a direct Settings escape hatch for setup fixes.
+- Remaining: visual polish and MediaEncoder-grade queue clarity.
 
 ## Interface / UX Checklist
 
@@ -146,6 +147,7 @@ Status: Partial.
 
 - Left navigation exists.
 - Guided Start view exists.
+- Guided Start shows the first-run fast path from Diagnose to sample render.
 - Persistent Inspector with next step, setup checklist, engine setup, guidance, and diagnostics exists.
 - TTS Studio exists.
 - Import Wizard exists.

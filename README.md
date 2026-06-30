@@ -46,7 +46,8 @@ cargo run -p bookcast-rust
 
 The Rust workbench has separate views for Start, TTS Studio, Import, Library,
 Characters, Podcast, and Settings. The Start view guides the first run through
-diagnostics, import, text preparation, and sample render. `Save Settings` writes
+diagnostics, import, text preparation, and sample render, with a fast-path box
+and direct Settings escape hatch for setup fixes. `Save Settings` writes
 `.bookcast-workbench.json` in the repo root;
 the file is ignored by Git.
 TTS Studio shows a render plan and blocks obvious bad jobs before they hit the

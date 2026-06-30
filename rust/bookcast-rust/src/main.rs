@@ -229,12 +229,39 @@ export component AppWindow inherits Window {
                                 font-size: 14px;
                                 wrap: word-wrap;
                             }
+                            Rectangle {
+                                background: rgb(250, 247, 238);
+                                border-color: rgb(228, 221, 204);
+                                border-width: 1px;
+                                border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 8px;
+                                    Text { text: "Fast path"; font-size: 16px; font-weight: 700; color: rgb(32, 36, 31); }
+                                    Text {
+                                        text: "1. Run Diagnose -> 2. Open Import Wizard -> 3. Refresh Books / Load Preview -> 4. Render TTS Test -> 5. Render Sample.";
+                                        color: rgb(45, 69, 58);
+                                        font-size: 13px;
+                                        wrap: word-wrap;
+                                    }
+                                    Text {
+                                        text: "If a step fails, the Inspector and Queue action tell you the next fix.";
+                                        color: rgb(89, 99, 93);
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
 
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
 
                             Text { text: "1. Check setup"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Validate Python bridge, ffmpeg, TTS fallback, and optional local engines."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
-                            Button { text: "Run Diagnose"; clicked => { root.diagnose(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Run Diagnose"; clicked => { root.diagnose(); } }
+                                Button { text: "Open Settings"; clicked => { root.current-view = 5; } }
+                            }
 
                             Text { text: "2. Add a book"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
                             Text { text: "Import one file, one folder, or diagnose a Calibre library before scanning."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
