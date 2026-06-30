@@ -76,8 +76,8 @@ export component AppWindow inherits Window {
     in-out property <string> setup-checklist-text: "[ ] Diagnostics\n[ ] Book selected\n[ ] Engine checked\n[ ] Sample rendered";
     in-out property <string> readiness-text: "Next: run diagnostics, import a source, then render a sample.";
     in-out property <string> render-plan-text: "Render plan: choose a book, choose an engine, render a sample, then full book.";
-    in-out property <string> engine-check-text: "Engine check: not run. Click Check Engine before rendering.";
-    in-out property <string> engine-setup-text: "Engine setup: choose an engine, then click Check Engine.";
+    in-out property <string> engine-check-text: "Engine check: not run. Click Check Voice Engine before rendering.";
+    in-out property <string> engine-setup-text: "Voice engine setup: choose a voice engine, then click Check Voice Engine.";
     in-out property <string> audio-cpp-status: "audio.cpp: not checked";
     in-out property <int> current-view: 6;
 
@@ -249,11 +249,11 @@ export component AppWindow inherits Window {
                             Button { text: "Open Library"; clicked => { root.current-view = 2; } }
 
                             Text { text: "4. Render audio"; font-size: 17px; font-weight: 700; color: rgb(32, 36, 31); }
-                            Text { text: "Pick engine, check it, render a short sample, then queue the full book."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
+                            Text { text: "Pick a voice engine, check it, render a short sample, then queue the full book."; color: rgb(89, 99, 93); font-size: 13px; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 10px;
                                 Button { text: "Open TTS Studio"; clicked => { root.current-view = 0; } }
-                                Button { text: "Check Engine"; clicked => { root.check-engine(); } }
+                                Button { text: "Check Voice Engine"; clicked => { root.check-engine(); } }
                             }
 
                             Rectangle { height: 1px; background: rgb(228, 221, 204); }
@@ -303,10 +303,31 @@ export component AppWindow inherits Window {
                                 wrap: word-wrap;
                             }
 
-                            Text { text: "Engine"; color: rgb(89, 99, 93); }
+                            Text { text: "Voice engine"; color: rgb(89, 99, 93); }
                             ComboBox {
-                                model: ["Windows SAPI via Python bridge", "Piper local process", "audio.cpp external process"];
+                                model: ["Windows voices (easy fallback)", "Piper local voices", "audio.cpp advanced voices"];
                                 current-index <=> root.engine-index;
+                            }
+                            Text {
+                                visible: root.engine-index == 0;
+                                text: "Best first test. Uses installed Windows voices. No files needed.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                visible: root.engine-index == 1;
+                                text: "Local Piper voices. Use this when the Piper app and voice folder are configured.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                visible: root.engine-index == 2;
+                                text: "Advanced audio.cpp voice engine. Needs audiocpp_cli.exe, model, backend, and family.";
+                                color: rgb(89, 99, 93);
+                                font-size: 13px;
+                                wrap: word-wrap;
                             }
                             Text {
                                 text: root.render-plan-text;
@@ -328,7 +349,7 @@ export component AppWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 10px;
-                                Button { text: "Check Engine"; clicked => { root.check-engine(); } }
+                                Button { text: "Check Voice Engine"; clicked => { root.check-engine(); } }
                                 Button { text: "Discover Voices"; clicked => { root.discover-voices(); } }
                                 Button { text: "First Voice"; clicked => { root.use-first-voice(); } }
                                 Button { text: "Previous Voice"; clicked => { root.use-previous-voice(); } }
@@ -3744,23 +3765,23 @@ fn engine_setup_text_from(
 ) -> String {
     match engine_index {
         1 => [
-            "Piper setup".to_string(),
-            checklist_line("Executable selected", !piper_exe.trim().is_empty()),
+            "Piper voices setup".to_string(),
+            checklist_line("Piper app selected", !piper_exe.trim().is_empty()),
             checklist_line(
-                "Executable exists",
+                "Piper app exists",
                 path_like_file_problem("Piper executable", piper_exe).is_none()
                     && !piper_exe.trim().is_empty(),
             ),
-            checklist_line("Voice/model selected", !voice.trim().is_empty()),
+            checklist_line("Voice selected", !voice.trim().is_empty()),
             checklist_line("Engine check passed", engine_check.contains("OK")),
-            "Next: Check Engine, render TTS Test, then Render Sample.".to_string(),
+            "Next: Check Voice Engine, render TTS Test, then Render Sample.".to_string(),
         ]
         .join("\n"),
         2 => [
-            "audio.cpp setup".to_string(),
-            checklist_line("Executable selected", !audio_cpp_exe.trim().is_empty()),
+            "audio.cpp advanced setup".to_string(),
+            checklist_line("audio.cpp app selected", !audio_cpp_exe.trim().is_empty()),
             checklist_line(
-                "Executable exists",
+                "audio.cpp app exists",
                 path_like_file_problem("audio.cpp executable", audio_cpp_exe).is_none()
                     && !audio_cpp_exe.trim().is_empty(),
             ),
@@ -3771,7 +3792,7 @@ fn engine_setup_text_from(
                     && !audio_cpp_model.trim().is_empty(),
             ),
             checklist_line("Backend set", !audio_cpp_backend.trim().is_empty()),
-            checklist_line("Family set", !audio_cpp_family.trim().is_empty()),
+            checklist_line("Model family set", !audio_cpp_family.trim().is_empty()),
             checklist_line(
                 "Engine check passed",
                 engine_check.contains("audio.cpp ready"),
@@ -3780,10 +3801,10 @@ fn engine_setup_text_from(
         ]
         .join("\n"),
         _ => [
-            "Windows SAPI setup".to_string(),
+            "Windows voices setup".to_string(),
             checklist_line("No path needed", true),
             checklist_line("Engine check passed", engine_check.contains("OK")),
-            "Next: Check Engine or render TTS Test, then Render Sample.".to_string(),
+            "Next: Check Voice Engine or render TTS Test, then Render Sample.".to_string(),
         ]
         .join("\n"),
     }
@@ -4609,7 +4630,7 @@ fn handle_bridge_events(
                     weak.clone(),
                     if piper {
                         prefer_piper_engine(weak.clone());
-                        "Diagnostics found Piper. Choose Piper local process, discover voices, then render a sample."
+                        "Diagnostics found Piper. Choose Piper local voices, discover voices, then render a sample."
                     } else if sapi {
                         "Diagnostics OK enough for Windows SAPI render. Import a source or scan Calibre."
                     } else {
@@ -6132,14 +6153,14 @@ mod tests {
             "",
             "Engine check OK: windows_sapi returned 1 voices.",
         );
-        assert!(sapi.contains("Windows SAPI setup"));
+        assert!(sapi.contains("Windows voices setup"));
         assert!(sapi.contains("[x] No path needed"));
 
         let piper =
             engine_setup_text_from(1, "piper.exe", "", "", "", "", "", "Engine check: not run");
-        assert!(piper.contains("Piper setup"));
-        assert!(piper.contains("[x] Executable selected"));
-        assert!(piper.contains("[ ] Voice/model selected"));
+        assert!(piper.contains("Piper voices setup"));
+        assert!(piper.contains("[x] Piper app selected"));
+        assert!(piper.contains("[ ] Voice selected"));
 
         let audio_cpp = engine_setup_text_from(
             2,
@@ -6151,9 +6172,9 @@ mod tests {
             "qwen3_tts",
             "Engine check OK: audio.cpp ready",
         );
-        assert!(audio_cpp.contains("audio.cpp setup"));
+        assert!(audio_cpp.contains("audio.cpp advanced setup"));
         assert!(audio_cpp.contains("[x] Backend set"));
-        assert!(audio_cpp.contains("[x] Family set"));
+        assert!(audio_cpp.contains("[x] Model family set"));
         assert!(audio_cpp.contains("[x] Engine check passed"));
     }
 }

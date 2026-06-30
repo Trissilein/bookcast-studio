@@ -159,12 +159,13 @@ Status: Partial.
 - Render sample before full render exists.
 - Native Browse buttons exist for important paths, including ffmpeg/ffprobe.
 - Discovered TTS voices can be selected with First/Previous/Next controls.
+- TTS Studio uses user-facing voice engine labels and inline guidance instead of raw provider/process wording.
 - Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Podcast script preview shows source-backed citations when available.
 - Podcast prompt presets reduce blank-state setup for educational, controversial, and interview scripts.
 - Startup restores saved library snapshot.
 - Manual test launcher prints a concrete beta pass checklist after preparing the library.
-- Remaining: final visual design, stronger error recovery, and less technical engine terminology.
+- Remaining: final visual design and stronger error recovery.
 
 ## Current Definition Of Done Before Beta
 
