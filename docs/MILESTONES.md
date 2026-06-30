@@ -78,7 +78,7 @@ Status: Mostly done.
 - Manual test launcher can prefill ffmpeg/ffprobe and real `audio.cpp` engine paths.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
-- Queue cards show elapsed runtime for long renders.
+- Queue cards show elapsed runtime and ETA for long renders.
 - Cancelled jobs stay marked as cancelled instead of being overwritten as failed after process exit.
 - Audiobook render can use confirmed `speaker=voice` mappings for chunks that start with `Speaker:`.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
@@ -154,7 +154,7 @@ Status: Partial.
 - Header guidance exists.
 - Queue summary exists.
 - Queue action guidance exists.
-- Queue job cards show progress, status, detail, and elapsed runtime.
+- Queue job cards show progress, status, detail, elapsed runtime, and ETA.
 - Cancelled jobs show a Retry Last recovery action.
 - Duplicate source imports are shown as reused duplicates in the queue/guide text.
 - Render sample before full render exists.

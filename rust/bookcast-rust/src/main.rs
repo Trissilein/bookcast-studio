@@ -3573,10 +3573,11 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
 fn queue_summary(jobs: &[JobState]) -> String {
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
         return format!(
-            "Running: {} at {}% after {} | {}",
+            "Running: {} at {}% after {} (ETA {}) | {}",
             job.label,
             job.progress,
             elapsed_label(job),
+            eta_label(job),
             job.detail
         );
     }
@@ -3651,6 +3652,15 @@ fn elapsed_label(job: &JobState) -> String {
     format_elapsed_ms(job.updated_ms.saturating_sub(job.started_ms))
 }
 
+fn eta_label(job: &JobState) -> String {
+    if job.status != "running" || job.progress == 0 || job.progress >= 100 {
+        return "--:--".to_string();
+    }
+    let elapsed_ms = job.updated_ms.saturating_sub(job.started_ms);
+    let total_ms = elapsed_ms.saturating_mul(100) / u64::from(job.progress);
+    format_elapsed_ms(total_ms.saturating_sub(elapsed_ms))
+}
+
 fn format_elapsed_ms(ms: u64) -> String {
     let seconds = ms / 1000;
     let minutes = seconds / 60;
@@ -3671,12 +3681,13 @@ fn job_status_label(status: &str) -> &str {
 
 fn job_queue_line(job: &JobState) -> String {
     format!(
-        "{} {:>3}%  {}  {}  elapsed {}\n  id #{:05}  {}",
+        "{} {:>3}%  {}  {}  elapsed {}  ETA {}\n  id #{:05}  {}",
         progress_bar(job.progress),
         job.progress.min(100),
         job_status_label(&job.status),
         job.label,
         elapsed_label(job),
+        eta_label(job),
         job.id % 100000,
         job.detail
     )
@@ -5427,6 +5438,7 @@ mod tests {
     use super::character_voice_template;
     use super::confirmed_voice_entries_from;
     use super::engine_setup_text_from;
+    use super::eta_label;
     use super::format_elapsed_ms;
     use super::import_done_detail;
     use super::job_progress_detail;
@@ -6009,7 +6021,7 @@ mod tests {
         ];
         assert_eq!(
             queue_summary(&jobs),
-            "Running: render at 42% after 01:15 | tts 2/5 rendered"
+            "Running: render at 42% after 01:15 (ETA 01:43) | tts 2/5 rendered"
         );
         assert_eq!(
             queue_action(&jobs),
@@ -6090,9 +6102,10 @@ mod tests {
         assert_eq!(progress_bar(42), "[####------]");
         assert_eq!(progress_bar(100), "[##########]");
         assert_eq!(format_elapsed_ms(75_000), "01:15");
+        assert_eq!(eta_label(&job), "01:43");
         assert_eq!(
             job_queue_line(&job),
-            "[####------]  42%  Running  render  elapsed 01:15\n  id #23456  tts 2/5 rendered"
+            "[####------]  42%  Running  render  elapsed 01:15  ETA 01:43\n  id #23456  tts 2/5 rendered"
         );
     }
 
