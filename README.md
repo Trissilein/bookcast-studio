@@ -58,6 +58,7 @@ show where long audiobook or podcast renders currently are; queue cards also
 show elapsed time and ETA for long-running jobs.
 Queue summaries keep elapsed time for completed, cancelled, and failed jobs, so
 the last outcome stays readable after a long render.
+Queue summaries also show compact job counts by status for quick backlog reading.
 The header shows the next safe action from current book, engine-check, output,
 and queue state; the queue footer highlights the active or failed job before the
 raw job log.

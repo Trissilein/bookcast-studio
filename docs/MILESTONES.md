@@ -80,6 +80,7 @@ Status: Mostly done.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime and ETA for long renders.
 - Queue summary retains elapsed duration for completed, cancelled, and failed jobs.
+- Queue summary shows compact counts by job status.
 - Cancelled jobs stay marked as cancelled instead of being overwritten as failed after process exit.
 - Audiobook render can use confirmed `speaker=voice` mappings for chunks that start with `Speaker:`.
 - Rust TTS Studio can cycle discovered voice IDs without manual copy/paste.
@@ -162,6 +163,7 @@ Status: Partial.
 - Queue action guidance exists.
 - Queue job cards show progress, status, detail, elapsed runtime, and ETA.
 - Queue summary preserves duration after done/failed/cancelled outcomes.
+- Queue summary includes compact running/done/failed/cancelled counts.
 - Cancelled jobs show a Retry Last recovery action.
 - Duplicate source imports are shown as reused duplicates in the queue/guide text.
 - Render sample before full render exists.

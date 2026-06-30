@@ -3634,41 +3634,80 @@ fn render_queue(weak: slint::Weak<AppWindow>, jobs: Arc<Mutex<Vec<JobState>>>) {
 }
 
 fn queue_summary(jobs: &[JobState]) -> String {
+    let counts = queue_counts_label(jobs);
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "running") {
         return format!(
-            "Running: {} at {}% after {} (ETA {}) | {}",
+            "Running: {} at {}% after {} (ETA {}) | {} | {}",
             job.label,
             job.progress,
             elapsed_label(job),
             eta_label(job),
-            job.detail
+            job.detail,
+            counts
         );
     }
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
         return format!(
-            "Attention: {} failed after {} | {}",
+            "Attention: {} failed after {} | {} | {}",
             job.label,
             elapsed_label(job),
-            job.detail
+            job.detail,
+            counts
         );
     }
     if let Some(job) = jobs.last() {
         if job.status == "cancelled" {
             return format!(
-                "Last cancelled: {} after {} | {}",
+                "Last cancelled: {} after {} | {} | {}",
                 job.label,
                 elapsed_label(job),
-                job.detail
+                job.detail,
+                counts
             );
         }
         return format!(
-            "Last done: {} after {} | {}",
+            "Last done: {} after {} | {} | {}",
             job.label,
             elapsed_label(job),
-            job.detail
+            job.detail,
+            counts
         );
     }
     "No active jobs. Queue idle.".to_string()
+}
+
+fn queue_counts_label(jobs: &[JobState]) -> String {
+    let mut running = 0;
+    let mut done = 0;
+    let mut failed = 0;
+    let mut cancelled = 0;
+    for job in jobs {
+        match job.status.as_str() {
+            "running" => running += 1,
+            "done" => done += 1,
+            "failed" => failed += 1,
+            "cancelled" => cancelled += 1,
+            _ => {}
+        }
+    }
+    let mut parts = Vec::new();
+    if running > 0 {
+        parts.push(format!("{running} running"));
+    }
+    if done > 0 {
+        parts.push(format!("{done} done"));
+    }
+    if failed > 0 {
+        parts.push(format!("{failed} failed"));
+    }
+    if cancelled > 0 {
+        parts.push(format!("{cancelled} cancelled"));
+    }
+    if parts.is_empty() {
+        format!("jobs {}", jobs.len())
+    } else {
+        format!("jobs {}: {}", jobs.len(), parts.join(", "))
+    }
 }
 
 fn queue_action(jobs: &[JobState]) -> String {
@@ -5550,6 +5589,7 @@ mod tests {
     use super::preferred_audio_cpp_family;
     use super::progress_bar;
     use super::queue_action;
+    use super::queue_counts_label;
     use super::queue_summary;
     use super::render_preflight_problem_from;
     use super::setup_checklist;
@@ -6116,8 +6156,9 @@ mod tests {
         ];
         assert_eq!(
             queue_summary(&jobs),
-            "Running: render at 42% after 01:15 (ETA 01:43) | tts 2/5 rendered"
+            "Running: render at 42% after 01:15 (ETA 01:43) | tts 2/5 rendered | jobs 2: 1 running, 1 done"
         );
+        assert_eq!(queue_counts_label(&jobs), "jobs 2: 1 running, 1 done");
         assert_eq!(
             queue_action(&jobs),
             "Queue action: wait for render or click Cancel. Current step: tts 2/5 rendered."
@@ -6134,7 +6175,7 @@ mod tests {
         }];
         assert_eq!(
             queue_summary(&failed),
-            "Attention: calibre scan failed after 00:01 | metadata.db missing"
+            "Attention: calibre scan failed after 00:01 | metadata.db missing | jobs 1: 1 failed"
         );
         assert_eq!(
             queue_action(&failed),
@@ -6152,7 +6193,7 @@ mod tests {
         }];
         assert_eq!(
             queue_summary(&cancelled),
-            "Last cancelled: render after 00:01 | Cancel sent to process 123"
+            "Last cancelled: render after 00:01 | Cancel sent to process 123 | jobs 1: 1 cancelled"
         );
         assert_eq!(
             queue_action(&cancelled),
@@ -6174,7 +6215,7 @@ mod tests {
 
         assert_eq!(
             queue_summary(&jobs),
-            "Last done: render after 00:01 | D:\\out\\book.opus"
+            "Last done: render after 00:01 | D:\\out\\book.opus | jobs 1: 1 done"
         );
         assert_eq!(
             queue_action(&jobs),
