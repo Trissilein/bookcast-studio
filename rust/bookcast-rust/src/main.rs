@@ -3645,13 +3645,28 @@ fn queue_summary(jobs: &[JobState]) -> String {
         );
     }
     if let Some(job) = jobs.iter().rev().find(|job| job.status == "failed") {
-        return format!("Attention: {} failed | {}", job.label, job.detail);
+        return format!(
+            "Attention: {} failed after {} | {}",
+            job.label,
+            elapsed_label(job),
+            job.detail
+        );
     }
     if let Some(job) = jobs.last() {
         if job.status == "cancelled" {
-            return format!("Last cancelled: {} | {}", job.label, job.detail);
+            return format!(
+                "Last cancelled: {} after {} | {}",
+                job.label,
+                elapsed_label(job),
+                job.detail
+            );
         }
-        return format!("Last done: {} | {}", job.label, job.detail);
+        return format!(
+            "Last done: {} after {} | {}",
+            job.label,
+            elapsed_label(job),
+            job.detail
+        );
     }
     "No active jobs. Queue idle.".to_string()
 }
@@ -6119,7 +6134,7 @@ mod tests {
         }];
         assert_eq!(
             queue_summary(&failed),
-            "Attention: calibre scan failed | metadata.db missing"
+            "Attention: calibre scan failed after 00:01 | metadata.db missing"
         );
         assert_eq!(
             queue_action(&failed),
@@ -6137,7 +6152,7 @@ mod tests {
         }];
         assert_eq!(
             queue_summary(&cancelled),
-            "Last cancelled: render | Cancel sent to process 123"
+            "Last cancelled: render after 00:01 | Cancel sent to process 123"
         );
         assert_eq!(
             queue_action(&cancelled),
@@ -6159,7 +6174,7 @@ mod tests {
 
         assert_eq!(
             queue_summary(&jobs),
-            "Last done: render | D:\\out\\book.opus"
+            "Last done: render after 00:01 | D:\\out\\book.opus"
         );
         assert_eq!(
             queue_action(&jobs),
