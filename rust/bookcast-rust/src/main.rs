@@ -117,6 +117,9 @@ export component AppWindow inherits Window {
     callback podcast-script();
     callback podcast-render();
     callback podcast-interactive();
+    callback use-educational-podcast-preset();
+    callback use-controversial-podcast-preset();
+    callback use-interview-podcast-preset();
     callback browse-podcast-script();
     callback open-podcast-script();
     callback open-podcast-script-folder();
@@ -743,6 +746,12 @@ export component AppWindow inherits Window {
                             ComboBox {
                                 model: ["educational", "controversial", "interview"];
                                 current-index <=> root.podcast-mode-index;
+                            }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Educational preset"; clicked => { root.use-educational-podcast-preset(); } }
+                                Button { text: "Controversial preset"; clicked => { root.use-controversial-podcast-preset(); } }
+                                Button { text: "Interview preset"; clicked => { root.use-interview-podcast-preset(); } }
                             }
                             HorizontalLayout {
                                 spacing: 10px;
@@ -1968,6 +1977,24 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
     });
 
     let weak = app.as_weak();
+    app.on_use_educational_podcast_preset(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_podcast_preset(&app, 0);
+    });
+
+    let weak = app.as_weak();
+    app.on_use_controversial_podcast_preset(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_podcast_preset(&app, 1);
+    });
+
+    let weak = app.as_weak();
+    app.on_use_interview_podcast_preset(move || {
+        let Some(app) = weak.upgrade() else { return };
+        apply_podcast_preset(&app, 2);
+    });
+
+    let weak = app.as_weak();
     let podcast_render_state = state.clone();
     app.on_podcast_render(move || {
         let Some(app) = weak.upgrade() else { return };
@@ -2666,6 +2693,35 @@ fn podcast_mode(index: i32) -> &'static str {
         2 => "interview",
         _ => "educational",
     }
+}
+
+fn podcast_preset(index: i32) -> (&'static str, &'static str) {
+    match index {
+        1 => (
+            "strong claims, counterarguments, evidence quality, and tradeoffs",
+            "balanced but pointed debate with a fact-checking voice",
+        ),
+        2 => (
+            "author intent, methods, findings, and concrete takeaways",
+            "curious interview with concise follow-up questions",
+        ),
+        _ => (
+            "core concepts, practical implications, and limitations",
+            "clear, patient, and structured for learners",
+        ),
+    }
+}
+
+fn apply_podcast_preset(app: &AppWindow, index: i32) {
+    let (focus, style) = podcast_preset(index);
+    app.set_podcast_mode_index(index);
+    app.set_podcast_focus(focus.into());
+    app.set_podcast_style(style.into());
+    app.set_podcast_text(format!("Preset loaded: {}.", podcast_mode(index)).into());
+    app.set_podcast_review_text(
+        "Review checklist: generate script, review speakers/turns, assign voices, tick confirmation, then render."
+            .into(),
+    );
 }
 
 fn ollama_args(app: &AppWindow) -> Vec<String> {
@@ -5319,6 +5375,7 @@ mod tests {
     use super::optional_voice_entries_from;
     use super::output_open_target;
     use super::parse_chapter_index;
+    use super::podcast_preset;
     use super::podcast_review_text;
     use super::podcast_script_preview_text;
     use super::podcast_speaker_template;
@@ -5415,6 +5472,21 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn podcast_presets_fill_focus_and_style() {
+        let (focus, style) = podcast_preset(0);
+        assert!(focus.contains("core concepts"));
+        assert!(style.contains("learners"));
+
+        let (focus, style) = podcast_preset(1);
+        assert!(focus.contains("counterarguments"));
+        assert!(style.contains("fact-checking"));
+
+        let (focus, style) = podcast_preset(2);
+        assert!(focus.contains("author intent"));
+        assert!(style.contains("follow-up"));
     }
 
     #[test]

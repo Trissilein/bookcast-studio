@@ -112,7 +112,8 @@ Status: Partial / usable prototype.
 - Rust Podcast view can browse, open, open folder for, reload, edit, validate, and save reviewed script JSON.
 - Podcast scripts can include review citations and Rust preview displays them.
 - Rust Podcast view exposes focus/style prompt controls for script generation.
-- Remaining: richer citation linking, deeper prompt presets, and real smoke tests with user-selected models.
+- Rust Podcast view has one-click prompt presets for educational, controversial, and interview scripts.
+- Remaining: richer citation linking and real smoke tests with user-selected models.
 
 ## M6 Interactive Podcast
 
@@ -160,6 +161,7 @@ Status: Partial.
 - Discovered TTS voices can be selected with First/Previous/Next controls.
 - Podcast script review can happen in app through a JSON editor with validate/save actions.
 - Podcast script preview shows source-backed citations when available.
+- Podcast prompt presets reduce blank-state setup for educational, controversial, and interview scripts.
 - Startup restores saved library snapshot.
 - Manual test launcher prints a concrete beta pass checklist after preparing the library.
 - Remaining: final visual design, stronger error recovery, and less technical engine terminology.
