@@ -2248,6 +2248,9 @@ fn run_bridge(
                                 job_id,
                                 &summarize_output(&text),
                             );
+                            if !output.status.success() {
+                                set_guide(weak.clone(), &bridge_recovery_text(&text));
+                            }
                         }
                         if label == "diagnose" && !cancelled {
                             set_diagnostics(weak.clone(), &text);
@@ -3861,6 +3864,42 @@ fn summarize_output(text: &str) -> String {
         .unwrap_or_else(|| "No output".to_string())
 }
 
+fn bridge_recovery_text(message: &str) -> String {
+    let lower = message.to_lowercase();
+    let has_missing_signal = lower.contains("not found")
+        || lower.contains("no such file")
+        || lower.contains("cannot find")
+        || lower.contains("is not recognized")
+        || lower.contains("filenotfound");
+
+    if lower.contains("ffmpeg") && has_missing_signal {
+        return "ffmpeg missing. In Settings, set ffmpeg executable or add ffmpeg to PATH, save settings, then Retry Last.".to_string();
+    }
+    if lower.contains("ffprobe") && has_missing_signal {
+        return "ffprobe missing. In Settings, set ffprobe executable or add ffprobe to PATH, save settings, then Retry Last.".to_string();
+    }
+    if lower.contains("calibredb") && has_missing_signal {
+        return "calibredb missing. Install Calibre or set calibredb executable in Import/Settings, then Diagnose Calibre again.".to_string();
+    }
+    if lower.contains("metadata.db") {
+        return "Calibre library not found. Select the folder that directly contains metadata.db, then Diagnose Calibre again.".to_string();
+    }
+    if lower.contains("audio.cpp") || lower.contains("audiocpp") {
+        return "audio.cpp setup failed. Check executable, model, backend, and family, then Check audio.cpp again.".to_string();
+    }
+    if lower.contains("piper") {
+        return "Piper setup failed. Check Piper executable and voice file/folder, then Check Voice Engine again.".to_string();
+    }
+    if lower.contains("ollama")
+        || lower.contains("connection refused")
+        || lower.contains("actively refused")
+    {
+        return "Ollama unavailable. Start Ollama, verify the model name, then retry script generation.".to_string();
+    }
+
+    format!("Fix required: {}", summarize_output(message))
+}
+
 fn json_string_list(value: &Value, key: &str) -> String {
     json_string_vec(value, key).join("\n")
 }
@@ -4987,7 +5026,7 @@ fn handle_bridge_events(
             Some("error") => {
                 if let Some(message) = value.get("message").and_then(Value::as_str) {
                     update_job(weak.clone(), jobs.clone(), job_id, "failed", 100, message);
-                    set_guide(weak.clone(), &format!("Fix required: {message}"));
+                    set_guide(weak.clone(), &bridge_recovery_text(message));
                 }
             }
             _ => {}
@@ -5379,6 +5418,7 @@ mod tests {
     use serde_json::json;
 
     use super::audio_cpp_update_status;
+    use super::bridge_recovery_text;
     use super::calibre_action_text;
     use super::calibre_suggested_path;
     use super::calibredb_args_from;
@@ -5597,6 +5637,20 @@ mod tests {
             .as_deref(),
             Some("audio.cpp selected, but backend is empty. Use cpu unless you know another backend is available.")
         );
+    }
+
+    #[test]
+    fn bridge_recovery_text_names_next_fix_for_common_tool_errors() {
+        assert!(bridge_recovery_text("FileNotFoundError: ffmpeg not found")
+            .contains("set ffmpeg executable"));
+        assert!(bridge_recovery_text("ffprobe: no such file").contains("set ffprobe executable"));
+        assert!(bridge_recovery_text("calibredb not found").contains("set calibredb executable"));
+        assert!(bridge_recovery_text("metadata.db not found in D:\\Books")
+            .contains("directly contains metadata.db"));
+        assert!(
+            bridge_recovery_text("audio.cpp family qwen3_tts failed").contains("Check audio.cpp")
+        );
+        assert!(bridge_recovery_text("Ollama connection refused").contains("Start Ollama"));
     }
 
     #[test]
