@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = Resolve-Path (Join-Path $PSScriptRoot "..")
+$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Blocked = 0
 
 function Resolve-ToolPath {
@@ -90,6 +90,54 @@ function Get-PreferredAudioCppFamily {
     return ""
 }
 
+function Join-DisplayList {
+    param(
+        [object[]]$Items,
+        [int]$Limit = 3
+    )
+    $Values = @($Items | ForEach-Object { [string]$_ } | Where-Object { $_ })
+    if ($Values.Count -eq 0) {
+        return ""
+    }
+    $Shown = @($Values | Select-Object -First $Limit)
+    $Suffix = ""
+    if ($Values.Count -gt $Limit) {
+        $Suffix = " (+$($Values.Count - $Limit) more)"
+    }
+    return (($Shown -join "; ") + $Suffix)
+}
+
+function Invoke-CalibreDiagnostic {
+    param(
+        [string]$LibraryPath,
+        [string]$CalibredbPath
+    )
+    if (-not $LibraryPath) {
+        return $null
+    }
+
+    $PythonExe = Join-Path $Repo ".venv\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        $PythonExe = "py"
+    }
+
+    $OldPythonPath = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = Join-Path $Repo "src"
+        $CalibredbArg = if ($CalibredbPath) { $CalibredbPath } else { "" }
+        $Code = "import json, sys; from pathlib import Path; from bookcast.calibre import diagnose_calibre_library; calibredb = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None; print(json.dumps(diagnose_calibre_library(Path(sys.argv[1]), calibredb=calibredb)))"
+        $Output = & $PythonExe -c $Code $LibraryPath $CalibredbArg 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $Output) {
+            return $null
+        }
+        return (($Output | Where-Object { $_.Trim() }) -join "`n" | ConvertFrom-Json)
+    } catch {
+        return $null
+    } finally {
+        $env:PYTHONPATH = $OldPythonPath
+    }
+}
+
 $Exe = Join-Path $Repo "dist\bookcast-studio-windows\bookcast-studio.exe"
 $Library = Join-Path $Repo ".manual-test\library"
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
@@ -140,13 +188,36 @@ if ($Ffprobe) {
 }
 
 if ($CalibreLibrary) {
-    $Metadata = Join-Path $CalibreLibrary "metadata.db"
-    if ((Test-Path -LiteralPath $CalibreLibrary -PathType Container) -and (Test-Path -LiteralPath $Metadata -PathType Leaf)) {
-        Write-Check "OK" "Real Calibre lib" $CalibreLibrary
-    } elseif (Test-Path -LiteralPath $CalibreLibrary -PathType Container) {
-        Write-Check "BLOCKED" "Real Calibre lib" "Folder exists but metadata.db is missing: $CalibreLibrary" $true
+    $CalibreDiagnostic = Invoke-CalibreDiagnostic $CalibreLibrary $Calibredb
+    if ($CalibreDiagnostic) {
+        if ($CalibreDiagnostic.healthy) {
+            $Sample = if ($null -ne $CalibreDiagnostic.sample_count) { "$($CalibreDiagnostic.sample_count) sample book(s)" } else { "readable" }
+            Write-Check "OK" "Real Calibre lib" "$($CalibreDiagnostic.calibre_library) ($Sample)"
+        } else {
+            $Issues = Join-DisplayList $CalibreDiagnostic.issues
+            if (-not $Issues) {
+                $Issues = "BookCast Calibre diagnostic failed."
+            }
+            Write-Check "BLOCKED" "Real Calibre lib" $Issues $true
+            if ($CalibreDiagnostic.suggested_library) {
+                Write-Check "TODO" "Suggested Calibre" $CalibreDiagnostic.suggested_library
+            }
+            if (@($CalibreDiagnostic.candidate_libraries).Count -gt 0) {
+                Write-Check "TODO" "Calibre candidates" (Join-DisplayList $CalibreDiagnostic.candidate_libraries)
+            }
+            if ([int]$CalibreDiagnostic.source_file_candidate_count -gt 0) {
+                Write-Check "TODO" "Source fallback" "$($CalibreDiagnostic.source_file_candidate_count) supported file(s) found. Use Import Source -> Folder."
+            }
+        }
     } else {
-        Write-Check "BLOCKED" "Real Calibre lib" "Folder not found: $CalibreLibrary" $true
+        $Metadata = Join-Path $CalibreLibrary "metadata.db"
+        if ((Test-Path -LiteralPath $CalibreLibrary -PathType Container) -and (Test-Path -LiteralPath $Metadata -PathType Leaf)) {
+            Write-Check "OK" "Real Calibre lib" $CalibreLibrary
+        } elseif (Test-Path -LiteralPath $CalibreLibrary -PathType Container) {
+            Write-Check "BLOCKED" "Real Calibre lib" "Folder exists but metadata.db is missing: $CalibreLibrary" $true
+        } else {
+            Write-Check "BLOCKED" "Real Calibre lib" "Folder not found: $CalibreLibrary" $true
+        }
     }
 } else {
     Write-Check "TODO" "Real Calibre lib" "Not supplied. Pass -CalibreLibrary for beta validation."
