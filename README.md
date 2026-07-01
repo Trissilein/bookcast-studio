@@ -55,7 +55,7 @@ Python bridge: missing book id, unsupported output format, missing Piper exe, or
 missing `audio.cpp` executable/model.
 Render jobs emit chunk/turn-level progress for TTS and assembly so the queue can
 show where long audiobook or podcast renders currently are; queue cards also
-show elapsed time and ETA for long-running jobs.
+show elapsed time, ETA, and chunks/min for long-running jobs.
 Queue summaries keep elapsed time for completed, cancelled, and failed jobs, so
 the last outcome stays readable after a long render.
 Queue summaries also show compact job counts by status for quick backlog reading.

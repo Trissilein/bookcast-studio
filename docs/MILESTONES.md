@@ -83,7 +83,7 @@ Status: Mostly done.
 - Beta readiness report lists local `audio.cpp` TTS families and blocks invalid configured families in strict mode.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
-- Queue cards show elapsed runtime and ETA for long renders.
+- Queue cards show elapsed runtime, ETA, and chunks/min for long renders.
 - Queue summary retains elapsed duration for completed, cancelled, and failed jobs.
 - Queue summary shows compact counts by job status.
 - Cancelled jobs stay marked as cancelled instead of being overwritten as failed after process exit.
@@ -168,6 +168,7 @@ Status: Partial.
 - Queue summary exists.
 - Queue action guidance exists.
 - Queue job cards show progress, status, detail, elapsed runtime, and ETA.
+- Queue job cards add chunk throughput when chunk progress events provide enough timing data.
 - Queue summary preserves duration after done/failed/cancelled outcomes.
 - Queue summary includes compact running/done/failed/cancelled counts.
 - Cancelled jobs show a Retry Last recovery action.

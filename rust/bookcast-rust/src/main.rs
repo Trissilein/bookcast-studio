@@ -4406,7 +4406,7 @@ fn import_done_detail(value: &Value) -> Option<String> {
     }
 }
 
-fn job_progress_detail(value: &Value) -> String {
+fn job_progress_detail(value: &Value, elapsed_ms: Option<u64>) -> String {
     if let Some(phase) = value.get("phase").and_then(Value::as_str) {
         let chunk = value.get("chunk").and_then(Value::as_u64).unwrap_or(0);
         let total = value.get("total").and_then(Value::as_u64).unwrap_or(0);
@@ -4415,8 +4415,9 @@ fn job_progress_detail(value: &Value) -> String {
             .and_then(Value::as_bool)
             .map(|is_cached| if is_cached { " cached" } else { " rendered" })
             .unwrap_or("");
+        let rate = chunk_rate_label(chunk, elapsed_ms);
         if total > 0 {
-            return format!("{phase} {chunk}/{total}{cached}");
+            return format!("{phase} {chunk}/{total}{cached}{rate}");
         }
         return phase.to_string();
     }
@@ -4425,6 +4426,29 @@ fn job_progress_detail(value: &Value) -> String {
         .and_then(Value::as_i64)
         .map(|chunks| format!("{chunks} chunks"))
         .unwrap_or_else(|| "Progress update".to_string())
+}
+
+fn chunk_rate_label(chunk: u64, elapsed_ms: Option<u64>) -> String {
+    let Some(elapsed_ms) = elapsed_ms else {
+        return String::new();
+    };
+    if chunk == 0 || elapsed_ms < 1_000 {
+        return String::new();
+    }
+    let per_minute = chunk.saturating_mul(60_000) / elapsed_ms;
+    if per_minute == 0 {
+        String::new()
+    } else {
+        format!(", {per_minute} chunks/min")
+    }
+}
+
+fn job_elapsed_ms(jobs: &Arc<Mutex<Vec<JobState>>>, id: u64) -> Option<u64> {
+    let now = now_ms();
+    let jobs = jobs.lock().expect("jobs lock");
+    jobs.iter()
+        .find(|job| job.id == id)
+        .map(|job| now.saturating_sub(job.started_ms))
 }
 
 fn handle_bridge_events(
@@ -4457,7 +4481,7 @@ fn handle_bridge_events(
                     .and_then(Value::as_u64)
                     .unwrap_or(50)
                     .min(100) as u8;
-                let detail = job_progress_detail(&value);
+                let detail = job_progress_detail(&value, job_elapsed_ms(&jobs, job_id));
                 update_job(
                     weak.clone(),
                     jobs.clone(),
@@ -6244,8 +6268,18 @@ mod tests {
     #[test]
     fn job_progress_detail_uses_phase_and_counter() {
         assert_eq!(
-            job_progress_detail(&json!({"phase":"tts","chunk":2,"total":5,"cached":false})),
+            job_progress_detail(
+                &json!({"phase":"tts","chunk":2,"total":5,"cached":false}),
+                None
+            ),
             "tts 2/5 rendered"
+        );
+        assert_eq!(
+            job_progress_detail(
+                &json!({"phase":"tts","chunk":4,"total":8,"cached":true}),
+                Some(120_000)
+            ),
+            "tts 4/8 cached, 2 chunks/min"
         );
     }
 
