@@ -138,6 +138,29 @@ function Invoke-CalibreDiagnostic {
     }
 }
 
+function Invoke-CalibreLibrarySearch {
+    $PythonExe = Join-Path $Repo ".venv\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        $PythonExe = "py"
+    }
+
+    $OldPythonPath = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = Join-Path $Repo "src"
+        $Code = "import json; from bookcast.calibre import find_calibre_libraries; print(json.dumps(find_calibre_libraries(limit=8)))"
+        $Output = & $PythonExe -c $Code 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $Output) {
+            return @()
+        }
+        $Parsed = (($Output | Where-Object { $_.Trim() }) -join "`n" | ConvertFrom-Json)
+        return @($Parsed)
+    } catch {
+        return @()
+    } finally {
+        $env:PYTHONPATH = $OldPythonPath
+    }
+}
+
 $Exe = Join-Path $Repo "dist\bookcast-studio-windows\bookcast-studio.exe"
 $Library = Join-Path $Repo ".manual-test\library"
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
@@ -220,7 +243,13 @@ if ($CalibreLibrary) {
         }
     }
 } else {
-    Write-Check "TODO" "Real Calibre lib" "Not supplied. Pass -CalibreLibrary for beta validation."
+    $CalibreCandidates = @(Invoke-CalibreLibrarySearch)
+    if ($CalibreCandidates.Count -gt 0) {
+        Write-Check "TODO" "Real Calibre lib" "Not supplied. Candidate found; rerun with -CalibreLibrary `"$($CalibreCandidates[0])`"."
+        Write-Check "TODO" "Calibre candidates" (Join-DisplayList $CalibreCandidates)
+    } else {
+        Write-Check "TODO" "Real Calibre lib" "Not supplied. Pass -CalibreLibrary for beta validation."
+    }
 }
 
 if ($Calibredb) {

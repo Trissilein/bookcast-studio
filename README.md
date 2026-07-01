@@ -148,9 +148,9 @@ prints the packaged executable path for manual testing.
 `beta_readiness_report.ps1` prints OK/TODO/BLOCKED status for the packaged app,
 synthetic library, ffmpeg/ffprobe, real Calibre, and real `audio.cpp` setup. It
 uses the same Calibre diagnosis as the app, including parent-library
-suggestions, nested-library candidates, and raw source-folder fallback. It also
-reads local `audio.cpp` TTS families and flags invalid family names in `-Strict`
-mode.
+suggestions, nested-library candidates, raw source-folder fallback, and
+candidate search when no real Calibre path is supplied. It also reads local
+`audio.cpp` TTS families and flags invalid family names in `-Strict` mode.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
 workbench at that book, prints the beta readiness report, and launches the
 desktop app for hands-on testing.

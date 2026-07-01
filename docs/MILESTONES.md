@@ -80,6 +80,7 @@ Status: Mostly done.
 - Manual test launcher can prefill ffmpeg/ffprobe and real `audio.cpp` engine paths.
 - Beta readiness report marks synthetic readiness, real Calibre readiness, and real `audio.cpp` readiness as OK/TODO/BLOCKED.
 - Beta readiness report reuses the app Calibre diagnosis for parent-folder suggestions, nested-library candidates, and source-folder fallback.
+- Beta readiness report searches for Calibre library candidates when no real Calibre path is supplied.
 - Beta readiness report lists local `audio.cpp` TTS families and blocks invalid configured families in strict mode.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
