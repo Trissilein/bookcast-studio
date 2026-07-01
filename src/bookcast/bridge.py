@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from datetime import datetime
@@ -20,6 +21,7 @@ from .tts import AudioCppProvider, PiperProvider, TtsProvider, WindowsSapiProvid
 DEFAULT_PIPER_EXE = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\piper.exe")
 DEFAULT_PIPER_VOICE_DIR = Path(r"D:\GIT\Trispr_Flow\src-tauri\bin\piper\voices")
 DEFAULT_AUDIO_CPP_EXE = Path(r"D:\GIT\audio.cpp\build\windows-cpu-release\bin\audiocpp_cli.exe")
+MODEL_SUFFIXES = {".gguf", ".onnx", ".bin", ".pt", ".pth", ".safetensors"}
 
 
 def emit(event: str, **payload: Any) -> None:
@@ -179,6 +181,61 @@ def audio_cpp_health(
         tts_families=families,
     )
     return 0 if healthy else 1
+
+
+def audio_cpp_find_models(roots: list[Path] | None = None, limit: int = 12) -> int:
+    candidates = _find_model_files(roots or _default_model_roots(), limit=limit)
+    emit("audio_cpp_models", candidates=[str(path) for path in candidates], count=len(candidates))
+    return 0
+
+
+def _find_model_files(roots: list[Path], limit: int = 12, max_depth: int = 5) -> list[Path]:
+    found: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        root = Path(root).expanduser()
+        if root.is_file() and root.suffix.lower() in MODEL_SUFFIXES:
+            key = str(root.resolve()).lower()
+            if key not in seen:
+                seen.add(key)
+                found.append(root)
+            continue
+        if not root.exists() or not root.is_dir():
+            continue
+        root_depth = len(root.parts)
+        try:
+            for current, dirs, files in os.walk(root):
+                current_path = Path(current)
+                depth = len(current_path.parts) - root_depth
+                if depth > max_depth:
+                    dirs[:] = []
+                    continue
+                dirs[:] = sorted([name for name in dirs if not name.startswith(".")], key=str.lower)
+                for name in sorted(files, key=str.lower):
+                    path = current_path / name
+                    if path.suffix.lower() not in MODEL_SUFFIXES:
+                        continue
+                    key = str(path.resolve()).lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    found.append(path)
+                    if len(found) >= limit:
+                        return found
+                if depth >= max_depth:
+                    dirs[:] = []
+        except OSError:
+            continue
+    return found
+
+
+def _default_model_roots() -> list[Path]:
+    roots = [DEFAULT_AUDIO_CPP_EXE.parents[2] if len(DEFAULT_AUDIO_CPP_EXE.parents) > 2 else DEFAULT_AUDIO_CPP_EXE.parent]
+    userprofile = os.environ.get("USERPROFILE")
+    if userprofile:
+        roots.extend([Path(userprofile) / "models", Path(userprofile) / ".cache"])
+    roots.extend([Path(r"D:\models"), Path(r"D:\AI\models")])
+    return roots
 
 
 def list_books(library_root: Path, preview_first: bool = False) -> int:

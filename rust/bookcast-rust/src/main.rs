@@ -94,6 +94,7 @@ export component AppWindow inherits Window {
     callback browse-piper-voice-dir();
     callback browse-audio-cpp-exe();
     callback browse-audio-cpp-model();
+    callback find-audio-cpp-models();
     callback diagnose();
     callback list-books();
     callback import-source();
@@ -993,6 +994,7 @@ export component AppWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 10px;
                                 LineEdit { text <=> root.audio-cpp-model; }
+                                Button { text: "Find"; clicked => { root.find-audio-cpp-models(); } }
                                 Button { text: "Browse"; clicked => { root.browse-audio-cpp-model(); } }
                             }
                             Text { text: "audio.cpp backend"; color: rgb(89, 99, 93); }
@@ -1408,6 +1410,35 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             app.set_engine_setup_text(engine_setup_text(&app).into());
             app.set_guide_text("audio.cpp model selected. Click Check audio.cpp next.".into());
         }
+    });
+
+    let weak = app.as_weak();
+    let audio_cpp_model_state = state.clone();
+    app.on_find_audio_cpp_models(move || {
+        let Some(app) = weak.upgrade() else { return };
+        app.set_engine_check_text(
+            "Searching for local audio.cpp model files in selected/common model folders...".into(),
+        );
+        let mut args = vec![
+            "bridge".into(),
+            "audio-cpp-find-models".into(),
+            "--limit".into(),
+            "12".into(),
+        ];
+        let model = app.get_audio_cpp_model().to_string();
+        if !model.trim().is_empty() {
+            if let Some(parent) = Path::new(model.trim()).parent() {
+                if !parent.as_os_str().is_empty() {
+                    args.extend(["--root".into(), path_to_string(parent)]);
+                }
+            }
+        }
+        run_bridge(
+            app.as_weak(),
+            audio_cpp_model_state.clone(),
+            "audio.cpp models",
+            args,
+        );
     });
 
     let weak = app.as_weak();
@@ -4611,6 +4642,33 @@ fn handle_bridge_events(
                     }
                 }
             }
+            Some("audio_cpp_models") => {
+                let candidates = json_string_vec(&value, "candidates");
+                let count = candidates.len();
+                if let Some(first) = candidates.first() {
+                    set_audio_model(weak.clone(), first);
+                    set_engine_check(
+                        weak.clone(),
+                        &format!(
+                            "Found {count} audio.cpp model candidate(s). Model field filled with first candidate.\n\n{}",
+                            candidates.join("\n")
+                        ),
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "Model candidate filled. Set/confirm audio.cpp family, then click Check audio.cpp.",
+                    );
+                } else {
+                    set_engine_check(
+                        weak.clone(),
+                        "No audio.cpp model files found. Use Browse or place models under D:\\models, D:\\AI\\models, audio.cpp, or your user models folder.",
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "No local model file found. Choose a model manually, then Check audio.cpp.",
+                    );
+                }
+            }
             Some("cleanup_profiles") => {
                 let profiles = value
                     .get("profiles")
@@ -5612,6 +5670,16 @@ fn set_audio_family_if_empty(weak: slint::Weak<AppWindow>, family: &str) {
             if app.get_audio_cpp_family().to_string().trim().is_empty() {
                 app.set_audio_cpp_family(family.into());
             }
+        }
+    });
+}
+
+fn set_audio_model(weak: slint::Weak<AppWindow>, model: &str) {
+    let model = model.to_string();
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = weak.upgrade() {
+            app.set_audio_cpp_model(model.into());
+            app.set_engine_setup_text(engine_setup_text(&app).into());
         }
     });
 }

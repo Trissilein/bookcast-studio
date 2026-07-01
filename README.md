@@ -82,6 +82,9 @@ shows only Piper paths, and `audio.cpp` shows only its executable/model/backend
 configuration.
 Use `Check Engine` before rendering; it validates the selected engine and shows
 the exact missing executable/model path when configuration is incomplete.
+The `audio.cpp` model field has a bounded Find action that searches common local
+model folders and fills the first model candidate; `Check audio.cpp` is still
+required before rendering.
 TTS Studio also has a free-text TTS test that writes a WAV through the selected
 engine without needing a book.
 The Library view can load cleanup profiles and apply one to the selected book;

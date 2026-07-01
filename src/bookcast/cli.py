@@ -147,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     bridge_audio_cpp.add_argument("--audio-cpp-backend", default="cpu")
     bridge_audio_cpp.add_argument("--audio-cpp-family", default=None)
 
+    bridge_audio_cpp_models = bridge_sub.add_parser("audio-cpp-find-models", help="Find likely local audio.cpp model files")
+    bridge_audio_cpp_models.add_argument("--root", type=Path, action="append", default=[])
+    bridge_audio_cpp_models.add_argument("--limit", type=int, default=12)
+
     bridge_list = bridge_sub.add_parser("list", help="Emit imported books as JSONL")
     bridge_list.add_argument("--library", type=Path, required=True)
     bridge_list.add_argument("--preview-first", action="store_true")
@@ -355,6 +359,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.audio_cpp_backend,
                 args.audio_cpp_family,
             )
+        if args.bridge_command == "audio-cpp-find-models":
+            return bridge.run_safely(bridge.audio_cpp_find_models, args.root, args.limit)
         if args.bridge_command == "list":
             return bridge.run_safely(bridge.list_books, args.library, args.preview_first)
         if args.bridge_command == "startup-snapshot":

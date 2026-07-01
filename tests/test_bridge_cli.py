@@ -580,6 +580,25 @@ def test_bridge_calibre_find_libraries_emits_candidates(tmp_path: Path, capsys) 
     ]
 
 
+def test_bridge_audio_cpp_find_models_emits_candidates(tmp_path: Path, capsys) -> None:
+    model = tmp_path / "models" / "voice.gguf"
+    model.parent.mkdir()
+    model.write_text("fake", encoding="utf-8")
+    (tmp_path / "models" / "ignore.txt").write_text("nope", encoding="utf-8")
+
+    result = main(["bridge", "audio-cpp-find-models", "--root", str(tmp_path), "--limit", "4"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert events == [
+        {
+            "event": "audio_cpp_models",
+            "candidates": [str(model)],
+            "count": 1,
+        }
+    ]
+
+
 def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys, monkeypatch) -> None:
     exe = tmp_path / "audio-cpp.exe"
     model = tmp_path / "model.gguf"
