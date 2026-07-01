@@ -155,6 +155,9 @@ candidates, and flags invalid family names in `-Strict` mode.
 `start_manual_test.ps1` prepares a persistent `.manual-test` library, points the
 workbench at that book, prints the beta readiness report, and launches the
 desktop app for hands-on testing.
+Use `-LongBook` to prepare a synthetic 24-chapter book and prefill a 25-chunk
+render limit for queue/progress/cancel/retry testing without needing a real
+long EPUB first.
 For a real Calibre pass, prefill the wizard:
 
 ```powershell
@@ -178,6 +181,15 @@ Manual beta pass checklist:
 4. Render M4B and inspect the output folder.
 5. If Calibre is configured: Diagnose Calibre, Scan Calibre, Import selected IDs.
 6. If audio.cpp is configured: Check audio.cpp, render a sample, then render a short chapter/full book.
+
+Long queue pass:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_manual_test.ps1 -LongBook
+```
+
+In TTS Studio, keep the prefilled chunk limit, add a render job, watch ETA and
+chunks/min, cancel mid-render, then use `Retry Last`.
 
 ## Import From CLI
 

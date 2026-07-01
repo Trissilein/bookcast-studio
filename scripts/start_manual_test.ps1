@@ -2,6 +2,7 @@ param(
     [switch]$SkipReadiness,
     [switch]$KeepExistingLibrary,
     [switch]$NoLaunch,
+    [switch]$LongBook,
     [string]$CalibreLibrary = "",
     [string]$CalibredbExe = "",
     [string]$FfmpegExe = "",
@@ -46,7 +47,16 @@ if (-not $KeepExistingLibrary -and (Test-Path $Library)) {
     if (-not $ResolvedLibrary.StartsWith($ResolvedManualRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to delete library outside manual-test root: $ResolvedLibrary"
     }
-    Remove-Item -LiteralPath $ResolvedLibrary -Recurse -Force
+    for ($Attempt = 1; $Attempt -le 3; $Attempt++) {
+        Remove-Item -LiteralPath $ResolvedLibrary -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $ResolvedLibrary)) {
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    if (Test-Path -LiteralPath $ResolvedLibrary) {
+        throw "Could not remove old manual-test library: $ResolvedLibrary"
+    }
 }
 
 if (-not $SkipReadiness) {
@@ -58,7 +68,11 @@ if (-not (Test-Path $Python)) {
     $Python = "py"
 }
 
-$SmokeOutput = & $Python scripts\acceptance_smoke.py --library $Library --keep
+$SmokeArgs = @("scripts\acceptance_smoke.py", "--library", $Library, "--keep")
+if ($LongBook) {
+    $SmokeArgs += @("--long", "--skip-render")
+}
+$SmokeOutput = & $Python @SmokeArgs
 if ($LASTEXITCODE -ne 0) {
     throw "Manual test library preparation failed."
 }
@@ -82,7 +96,7 @@ $Workbench = [ordered]@{
     book_id = [string]$Smoke.book_id
     voice_name = ""
     output_format = "opus"
-    render_limit = ""
+    render_limit = $(if ($LongBook) { "25" } else { "" })
     ffmpeg_path = [string]$FfmpegExe
     ffprobe_path = [string]$FfprobeExe
     tts_test_text = "BookCast manual test."
@@ -117,12 +131,20 @@ Write-Host "Manual test library ready:"
 Write-Host $Smoke.library
 Write-Host "Book id:"
 Write-Host $Smoke.book_id
+if ($LongBook) {
+    Write-Host "Chunks:"
+    Write-Host $Smoke.chunk_count
+}
 Write-Host ""
 Write-Host "Manual test checklist:"
 Write-Host "1. Start view: run Diagnose, verify ffmpeg/ffprobe and Windows SAPI or selected engine."
 Write-Host "2. TTS Studio: click Check Engine, then Render TTS Test."
 Write-Host "3. TTS Studio: Render Sample, play output with Open File."
-Write-Host "4. TTS Studio: set output to M4B, Add Render Job, verify chapters with Open Folder."
+if ($LongBook) {
+    Write-Host "4. TTS Studio: keep chunk limit 25 for first pass, Add Render Job, watch chunks/min, Cancel, then Retry Last."
+} else {
+    Write-Host "4. TTS Studio: set output to M4B, Add Render Job, verify chapters with Open Folder."
+}
 Write-Host "5. Import: if Calibre was prefilled, Diagnose Calibre, Scan Calibre, Import selected IDs."
 if ($AudioCppExe -or $AudioCppModel -or $AudioCppFamily) {
     Write-Host "6. audio.cpp: Check audio.cpp, render a sample, then render a short chapter/full book."

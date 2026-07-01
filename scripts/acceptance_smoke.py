@@ -19,26 +19,30 @@ def main() -> int:
     parser.add_argument("--library", type=Path, default=None)
     parser.add_argument("--keep", action="store_true", help="Keep temporary library/source files.")
     parser.add_argument("--skip-render", action="store_true", help="Stop before TTS/ffmpeg render.")
+    parser.add_argument("--long", action="store_true", help="Generate a longer synthetic German EPUB for manual queue tests.")
+    parser.add_argument("--chapters", type=int, default=24, help="Chapter count for --long.")
+    parser.add_argument("--render-limit", type=int, default=None, help="Limit full renders to the first N chunks.")
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
     temp_dir = Path(tempfile.mkdtemp(prefix="bookcast-acceptance-"))
     library = args.library or temp_dir / "library"
-    source = temp_dir / "Ada Autor - Akzeptanz Rauchtest.epub"
+    source = temp_dir / ("Ada Autor - Langer Warteschlangen Test.epub" if args.long else "Ada Autor - Akzeptanz Rauchtest.epub")
+    chapters = long_chapters(args.chapters) if args.long else [
+        (
+            "Kapitel Eins",
+            "Das erste Kapitel beginnt hier. Dies ist ein kurzer deutscher EPUB-Rauchtest.",
+        ),
+        (
+            "Kapitel Zwei",
+            "Das zweite Kapitel ist kurz, muss aber eine echte M4B-Kapitelmarke erzeugen.",
+        ),
+    ]
     write_acceptance_epub(
         source,
-        title="Akzeptanz Rauchtest",
+        title="Langer Warteschlangen Test" if args.long else "Akzeptanz Rauchtest",
         author="Ada Autor",
-        chapters=[
-            (
-                "Kapitel Eins",
-                "Das erste Kapitel beginnt hier. Dies ist ein kurzer deutscher EPUB-Rauchtest.",
-            ),
-            (
-                "Kapitel Zwei",
-                "Das zweite Kapitel ist kurz, muss aber eine echte M4B-Kapitelmarke erzeugen.",
-            ),
-        ],
+        chapters=chapters,
     )
 
     try:
@@ -59,6 +63,7 @@ def main() -> int:
 
         preview = first_event(imported, "book_preview")
         require("Das erste Kapitel beginnt" in str(preview.get("preview", "")), "Import preview missing expected text")
+        chunk_count = int(preview.get("chunk_count", 0) or 0)
 
         if not args.skip_render:
             sample = run_bridge(
@@ -71,7 +76,7 @@ def main() -> int:
 
             rendered = run_bridge(
                 repo,
-                ["render", book_id, "--library", str(library), "--format", "opus", "--voice", voice],
+                render_args(book_id, library, "opus", voice, args.render_limit),
             )
             assert_event(rendered, "job_done")
             output_path = Path(str(first_event(rendered, "job_done")["output"]))
@@ -79,12 +84,12 @@ def main() -> int:
 
             rendered_m4b = run_bridge(
                 repo,
-                ["render", book_id, "--library", str(library), "--format", "m4b", "--voice", voice],
+                render_args(book_id, library, "m4b", voice, args.render_limit),
             )
             assert_event(rendered_m4b, "job_done")
             m4b_path = Path(str(first_event(rendered_m4b, "job_done")["output"]))
             require_audio_file(repo, m4b_path, "M4B render output")
-            require_chapters(repo, m4b_path, 2)
+            require_chapters(repo, m4b_path, 1 if args.render_limit else 2)
 
             outputs = run_bridge(repo, ["outputs", "--library", str(library), "--book-id", book_id])
             assert_event(outputs, "outputs")
@@ -129,7 +134,7 @@ def main() -> int:
                 piper_path = Path(str(first_event(piper_sample, "job_done")["output"]))
                 require_audio_file(repo, piper_path, "Piper sample output")
 
-        print(json.dumps({"ok": True, "library": str(library), "book_id": book_id}, indent=2))
+        print(json.dumps({"ok": True, "library": str(library), "book_id": book_id, "chunk_count": chunk_count}, indent=2))
         return 0
     finally:
         if args.library is None and not args.keep:
@@ -150,6 +155,30 @@ def run_bridge(repo: Path, args: list[str]) -> list[dict[str, object]]:
     events = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     require(events, f"Bridge command emitted no events: {' '.join(args)}")
     return events
+
+
+def render_args(book_id: str, library: Path, output_format: str, voice: str, limit: int | None) -> list[str]:
+    args = ["render", book_id, "--library", str(library), "--format", output_format, "--voice", voice]
+    if limit:
+        args.extend(["--limit", str(limit)])
+    return args
+
+
+def long_chapters(count: int) -> list[tuple[str, str]]:
+    count = max(4, count)
+    paragraphs = []
+    base = (
+        "Das erste Kapitel beginnt hier. Dieser Abschnitt simuliert ein langes deutsches Sachbuch. "
+        "Die Saetze sind absichtlich normal lang, damit BookCast viele stabile Chunks erzeugt. "
+        "Ada erklaert den Plan, Bob stellt Rueckfragen, und die Erzaehlerin fasst den Fortschritt zusammen."
+    )
+    for index in range(1, count + 1):
+        text = "\n\n".join(
+            f"{base} Abschnitt {index}.{part} prueft Warteschlange, Fortschritt, Abbruch und Wiederaufnahme."
+            for part in range(1, 7)
+        )
+        paragraphs.append((f"Kapitel {index:02d}", text))
+    return paragraphs
 
 
 def write_acceptance_epub(path: Path, *, title: str, author: str, chapters: list[tuple[str, str]]) -> None:
