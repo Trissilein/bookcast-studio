@@ -194,7 +194,7 @@ def _find_model_files(roots: list[Path], limit: int = 12, max_depth: int = 5) ->
     seen: set[str] = set()
     for root in roots:
         root = Path(root).expanduser()
-        if root.is_file() and root.suffix.lower() in MODEL_SUFFIXES:
+        if root.is_file() and _looks_like_model_file(root):
             key = str(root.resolve()).lower()
             if key not in seen:
                 seen.add(key)
@@ -213,7 +213,7 @@ def _find_model_files(roots: list[Path], limit: int = 12, max_depth: int = 5) ->
                 dirs[:] = sorted([name for name in dirs if not name.startswith(".")], key=str.lower)
                 for name in sorted(files, key=str.lower):
                     path = current_path / name
-                    if path.suffix.lower() not in MODEL_SUFFIXES:
+                    if not _looks_like_model_file(path):
                         continue
                     key = str(path.resolve()).lower()
                     if key in seen:
@@ -229,11 +229,21 @@ def _find_model_files(roots: list[Path], limit: int = 12, max_depth: int = 5) ->
     return found
 
 
+def _looks_like_model_file(path: Path) -> bool:
+    if path.suffix.lower() not in MODEL_SUFFIXES:
+        return False
+    ignored_parts = {"cmakefiles", ".git", "target", "__pycache__"}
+    if any(part.lower() in ignored_parts for part in path.parts):
+        return False
+    ignored_prefixes = ("cmakedeterminecompilerabi", "cmakeccompilerid", "cmakecxxcompilerid")
+    return not path.name.lower().startswith(ignored_prefixes)
+
+
 def _default_model_roots() -> list[Path]:
     roots = [DEFAULT_AUDIO_CPP_EXE.parents[2] if len(DEFAULT_AUDIO_CPP_EXE.parents) > 2 else DEFAULT_AUDIO_CPP_EXE.parent]
     userprofile = os.environ.get("USERPROFILE")
     if userprofile:
-        roots.extend([Path(userprofile) / "models", Path(userprofile) / ".cache"])
+        roots.append(Path(userprofile) / "models")
     roots.extend([Path(r"D:\models"), Path(r"D:\AI\models")])
     return roots
 

@@ -585,6 +585,9 @@ def test_bridge_audio_cpp_find_models_emits_candidates(tmp_path: Path, capsys) -
     model.parent.mkdir()
     model.write_text("fake", encoding="utf-8")
     (tmp_path / "models" / "ignore.txt").write_text("nope", encoding="utf-8")
+    cmake_bin = tmp_path / "build" / "CMakeFiles" / "CMakeDetermineCompilerABI_C.bin"
+    cmake_bin.parent.mkdir(parents=True)
+    cmake_bin.write_text("not a model", encoding="utf-8")
 
     result = main(["bridge", "audio-cpp-find-models", "--root", str(tmp_path), "--limit", "4"])
     events = _events(capsys.readouterr().out)

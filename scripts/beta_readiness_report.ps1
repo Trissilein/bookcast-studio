@@ -6,6 +6,7 @@ param(
     [string]$FfprobeExe = "",
     [string]$AudioCppExe = "",
     [string]$AudioCppModel = "",
+    [string]$AudioCppModelRoot = "",
     [string]$AudioCppFamily = "",
     [string]$AudioCppBackend = "cpu"
 )
@@ -161,6 +162,35 @@ function Invoke-CalibreLibrarySearch {
     }
 }
 
+function Invoke-AudioCppModelSearch {
+    param([string]$ModelRoot)
+    $PythonExe = Join-Path $Repo ".venv\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+        $PythonExe = "py"
+    }
+
+    $OldPythonPath = $env:PYTHONPATH
+    try {
+        $env:PYTHONPATH = Join-Path $Repo "src"
+        if ($ModelRoot) {
+            $Code = "import json, sys; from pathlib import Path; from bookcast.bridge import _find_model_files; print(json.dumps([str(path) for path in _find_model_files([Path(sys.argv[1])], limit=8)]))"
+            $Output = & $PythonExe -c $Code $ModelRoot 2>$null
+        } else {
+            $Code = "import json; from bookcast.bridge import _default_model_roots, _find_model_files; print(json.dumps([str(path) for path in _find_model_files(_default_model_roots(), limit=8)]))"
+            $Output = & $PythonExe -c $Code 2>$null
+        }
+        if ($LASTEXITCODE -ne 0 -or -not $Output) {
+            return @()
+        }
+        $Parsed = (($Output | Where-Object { $_.Trim() }) -join "`n" | ConvertFrom-Json)
+        return @($Parsed)
+    } catch {
+        return @()
+    } finally {
+        $env:PYTHONPATH = $OldPythonPath
+    }
+}
+
 $Exe = Join-Path $Repo "dist\bookcast-studio-windows\bookcast-studio.exe"
 $Library = Join-Path $Repo ".manual-test\library"
 $Python = Join-Path $Repo ".venv\Scripts\python.exe"
@@ -277,7 +307,13 @@ if ($AudioCppModel) {
         Write-Check "BLOCKED" "audio.cpp model" "Model file not found: $AudioCppModel" $true
     }
 } else {
-    Write-Check "TODO" "audio.cpp model" "Not supplied. Needed for real audio.cpp render."
+    $AudioCppModelCandidates = @(Invoke-AudioCppModelSearch $AudioCppModelRoot)
+    if ($AudioCppModelCandidates.Count -gt 0) {
+        Write-Check "TODO" "audio.cpp model" "Not supplied. Candidate found; rerun with -AudioCppModel `"$($AudioCppModelCandidates[0])`"."
+        Write-Check "TODO" "audio.cpp models" (Join-DisplayList $AudioCppModelCandidates)
+    } else {
+        Write-Check "TODO" "audio.cpp model" "Not supplied. Needed for real audio.cpp render."
+    }
 }
 
 if ($AudioCppFamily) {

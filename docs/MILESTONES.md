@@ -82,6 +82,7 @@ Status: Mostly done.
 - Beta readiness report reuses the app Calibre diagnosis for parent-folder suggestions, nested-library candidates, and source-folder fallback.
 - Beta readiness report searches for Calibre library candidates when no real Calibre path is supplied.
 - Beta readiness report lists local `audio.cpp` TTS families and blocks invalid configured families in strict mode.
+- Beta readiness report can search a supplied `-AudioCppModelRoot` for likely model files without scanning broad cache folders.
 - Chaptered export exists.
 - Queue progress, cancel, retry, and output refresh exist.
 - Queue cards show elapsed runtime, ETA, and chunks/min for long renders.
