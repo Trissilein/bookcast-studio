@@ -4382,6 +4382,12 @@ fn podcast_script_preview_text(script: &Value) -> String {
     format!("{title}\nSpeakers: {speakers}\n\n{summary}{citations}\n\n{turns}")
 }
 
+fn interactive_session_review_text(state_path: &str) -> String {
+    format!(
+        "Interactive session saved. Review session JSON/transcript, then use Open Script/Open Folder. Session: {state_path}"
+    )
+}
+
 fn import_done_detail(value: &Value) -> Option<String> {
     if value.get("job").and_then(Value::as_str) != Some("import") {
         return None;
@@ -5312,12 +5318,21 @@ fn handle_bridge_events(
                 append_podcast_text(weak.clone(), &line);
             }
             Some("interactive_podcast") => {
-                if let Some(output) = value.get("output").and_then(Value::as_str) {
+                let output = value.get("output").and_then(Value::as_str).unwrap_or("");
+                let state = value.get("state").and_then(Value::as_str).unwrap_or("");
+                if !state.is_empty() {
+                    set_podcast_script_path(weak.clone(), state);
+                    if let Ok(pretty) = serde_json::to_string_pretty(&value) {
+                        set_podcast_script_json(weak.clone(), &pretty);
+                    }
+                    set_podcast_review_text(weak.clone(), &interactive_session_review_text(state));
+                }
+                if !output.is_empty() {
                     set_last_output(weak.clone(), output);
                     set_guide(
                         weak.clone(),
                         &format!(
-                            "Interactive podcast rendered: {output}. Use Open File to play it."
+                            "Interactive podcast rendered: {output}. Session saved: {state}. Use Open File to play it."
                         ),
                     );
                 }
@@ -5739,6 +5754,7 @@ mod tests {
     use super::eta_label;
     use super::format_elapsed_ms;
     use super::import_done_detail;
+    use super::interactive_session_review_text;
     use super::job_progress_detail;
     use super::job_queue_line;
     use super::media_tool_args_from;
@@ -6212,6 +6228,15 @@ mod tests {
         assert!(review.contains("Assign every speaker=voice"));
         assert!(review.contains("will reuse this reviewed script path"));
         assert!(review.contains("D:\\out\\podcast.json"));
+    }
+
+    #[test]
+    fn interactive_session_review_names_saved_state() {
+        let text = interactive_session_review_text("D:\\books\\session.json");
+
+        assert!(text.contains("Interactive session saved"));
+        assert!(text.contains("session.json"));
+        assert!(text.contains("Open Script/Open Folder"));
     }
 
     #[test]

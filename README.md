@@ -16,6 +16,7 @@ Current slice:
 - ffmpeg assembly to Opus, MP3, WAV, or M4B.
 - Ollama-assisted character suggestions, static podcast scripts, and podcast render.
 - Interactive podcast sessions with resident Ollama, follow-up prompts, and rendered output.
+- Interactive sessions save `session.json` and expose the session path/transcript in the Podcast editor.
 - Confirmed speaker-to-voice mapping before podcast or character-style multi-voice rendering.
 - Text cleanup and stable chunk hashes.
 - Editable cleanup profiles and chapter review/editing in the Python UI and Rust Library view.
