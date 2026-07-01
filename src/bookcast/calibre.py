@@ -166,6 +166,65 @@ def diagnose_calibre_library(library_path: Path, calibredb: str | None = None) -
     }
 
 
+def find_calibre_libraries(
+    roots: list[Path] | None = None,
+    *,
+    limit: int = 8,
+    max_depth: int = 4,
+    environ: dict[str, str] | None = None,
+) -> list[str]:
+    search_roots = roots or _calibre_search_roots(environ or os.environ)
+    found: list[str] = []
+    seen: set[str] = set()
+    for root in search_roots:
+        root = Path(root).expanduser()
+        if not root.exists() or not root.is_dir():
+            continue
+        candidates = [str(root)] if (root / "metadata.db").exists() else []
+        candidates.extend(_calibre_library_candidates(root, limit=limit, max_depth=max_depth))
+        for candidate in candidates:
+            key = str(Path(candidate).resolve()).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(candidate)
+            if len(found) >= limit:
+                return found
+    return found
+
+
+def _calibre_search_roots(environ: dict[str, str]) -> list[Path]:
+    raw_roots: list[str] = []
+    for key in ("CALIBRE_LIBRARY", "CALIBRE_LIBRARY_DIRECTORY"):
+        value = environ.get(key)
+        if value:
+            raw_roots.append(value)
+
+    userprofile = environ.get("USERPROFILE")
+    if userprofile:
+        raw_roots.extend(
+            [
+                str(Path(userprofile) / "Calibre Library"),
+                str(Path(userprofile) / "Documents"),
+                str(Path(userprofile) / "OneDrive" / "Documents"),
+            ]
+        )
+    for key in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        value = environ.get(key)
+        if value:
+            raw_roots.extend([str(Path(value) / "Calibre Library"), str(Path(value) / "Documents")])
+
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for raw in raw_roots:
+        path = Path(raw)
+        key = str(path).lower()
+        if key not in seen:
+            seen.add(key)
+            roots.append(path)
+    return roots
+
+
 def _calibre_library_candidates(path: Path, limit: int = 8, max_depth: int = 4) -> list[str]:
     if not path.is_dir():
         return []

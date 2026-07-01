@@ -562,6 +562,24 @@ def test_bridge_audio_cpp_health_reports_missing_config(tmp_path: Path, capsys, 
     ]
 
 
+def test_bridge_calibre_find_libraries_emits_candidates(tmp_path: Path, capsys) -> None:
+    library = tmp_path / "Books" / "Calibre Library"
+    library.mkdir(parents=True)
+    (library / "metadata.db").write_text("", encoding="utf-8")
+
+    result = main(["bridge", "calibre-find-libraries", "--root", str(tmp_path), "--limit", "4"])
+    events = _events(capsys.readouterr().out)
+
+    assert result == 0
+    assert events == [
+        {
+            "event": "calibre_libraries",
+            "candidates": [str(library)],
+            "count": 1,
+        }
+    ]
+
+
 def test_bridge_audio_cpp_health_accepts_working_provider(tmp_path: Path, capsys, monkeypatch) -> None:
     exe = tmp_path / "audio-cpp.exe"
     model = tmp_path / "model.gguf"

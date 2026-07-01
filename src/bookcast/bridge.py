@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .assembler import assemble_audio
-from .calibre import CalibreClient, diagnose_calibre_library, find_calibredb
+from .calibre import CalibreClient, diagnose_calibre_library, find_calibre_libraries, find_calibredb
 from .characters import suggest_characters as generate_character_suggestions
 from .importers import SUPPORTED_EXTENSIONS, extract
 from .library import BookLibrary, safe_name
@@ -609,6 +609,12 @@ def calibre_diagnose(calibre_library: Path, calibredb: str | None = None) -> int
     diagnostic = diagnose_calibre_library(calibre_library, calibredb=calibredb)
     emit("calibre_diagnostic", **diagnostic)
     return 0 if diagnostic["healthy"] else 1
+
+
+def calibre_find_libraries(roots: list[Path] | None = None, limit: int = 8) -> int:
+    candidates = find_calibre_libraries(roots, limit=limit)
+    emit("calibre_libraries", candidates=candidates, count=len(candidates))
+    return 0
 
 
 def calibre_import(

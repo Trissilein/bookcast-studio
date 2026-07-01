@@ -98,6 +98,7 @@ export component AppWindow inherits Window {
     callback list-books();
     callback import-source();
     callback diagnose-calibre();
+    callback find-calibre-libraries();
     callback use-suggested-calibre();
     callback use-source-suggestion();
     callback scan-calibre();
@@ -554,7 +555,11 @@ export component AppWindow inherits Window {
                                 font-size: 12px;
                                 wrap: word-wrap;
                             }
-                            Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
+                            HorizontalLayout {
+                                spacing: 10px;
+                                Button { text: "Find Libraries"; clicked => { root.find-calibre-libraries(); } }
+                                Button { text: "Diagnose Calibre"; clicked => { root.diagnose-calibre(); } }
+                            }
                             Text {
                                 text: root.calibre-action-text;
                                 color: rgb(133, 82, 38);
@@ -1483,6 +1488,35 @@ fn wire_callbacks(app: &AppWindow, state: AppState) {
             args.extend(["--cleanup-profile".into(), profile]);
         }
         run_bridge(app.as_weak(), import_state.clone(), "import", args);
+    });
+
+    let weak = app.as_weak();
+    let calibre_find_state = state.clone();
+    app.on_find_calibre_libraries(move || {
+        let Some(app) = weak.upgrade() else { return };
+        app.set_calibre_action_text(
+            "Searching common Windows locations for Calibre metadata.db...".into(),
+        );
+        app.set_guide_text(
+            "Calibre search is limited to common user folders. If nothing appears, use Browse on the exact library root."
+                .into(),
+        );
+        let mut args = vec![
+            "bridge".into(),
+            "calibre-find-libraries".into(),
+            "--limit".into(),
+            "8".into(),
+        ];
+        let selected = app.get_calibre_path().to_string();
+        if !selected.trim().is_empty() {
+            args.extend(["--root".into(), selected]);
+        }
+        run_bridge(
+            app.as_weak(),
+            calibre_find_state.clone(),
+            "calibre find",
+            args,
+        );
     });
 
     let weak = app.as_weak();
@@ -5072,6 +5106,42 @@ fn handle_bridge_events(
                     weak.clone(),
                     "Scan complete. Next: review Calibre IDs, then click Import Calibre IDs.",
                 );
+            }
+            Some("calibre_libraries") => {
+                let candidates = json_string_vec(&value, "candidates");
+                let count = candidates.len();
+                if let Some(first) = candidates.first() {
+                    set_calibre_suggested_path(weak.clone(), first);
+                    set_calibre_preview(
+                        weak.clone(),
+                        &format!(
+                            "Found {count} Calibre candidate(s).\n\n{}",
+                            candidates.join("\n")
+                        ),
+                    );
+                    set_calibre_action(
+                        weak.clone(),
+                        "Candidates found. Next: Use suggested Calibre, then Diagnose Calibre.",
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "Calibre candidates found. Apply the suggested path, diagnose, then scan.",
+                    );
+                } else {
+                    set_calibre_suggested_path(weak.clone(), "");
+                    set_calibre_preview(
+                        weak.clone(),
+                        "No Calibre libraries found in common Windows locations. Use Browse and select the folder containing metadata.db.",
+                    );
+                    set_calibre_action(
+                        weak.clone(),
+                        "No candidates found. Browse to the exact Calibre library root, then Diagnose Calibre.",
+                    );
+                    set_guide(
+                        weak.clone(),
+                        "Calibre search found nothing. Pick the folder that contains metadata.db.",
+                    );
+                }
             }
             Some("calibre_imported") => {
                 let title = value.get("title").and_then(Value::as_str).unwrap_or("");

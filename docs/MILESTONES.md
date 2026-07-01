@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-07-01 with 64 Python tests, 33 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-07-01 with 67 Python tests, 33 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -45,6 +45,7 @@ Status: Mostly done.
 - Diagnostics explain wrong folder, missing `metadata.db`, missing `calibredb`, and unreadable/locked library cases.
 - Wizard can suggest nested/parent library folders and source-folder fallback.
 - Rust Calibre wizard can browse and persist a custom `calibredb.exe` path when Calibre is not in PATH.
+- Rust Calibre wizard can search common Windows user folders for candidate libraries and apply the first candidate for diagnosis.
 - `calibredb.exe` discovery checks PATH, common Windows install folders, portable/local app folders, Scoop, Chocolatey, and registry install locations.
 - Remaining: validate against the user's real Calibre library and polish real-world failure cases.
 

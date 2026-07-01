@@ -96,6 +96,9 @@ and AI/Ollama instead of one flat technical list.
 Calibre discovery checks PATH, common Windows install folders, portable/local
 app folders, Scoop, Chocolatey, and registry install locations before asking
 for a manual `calibredb.exe` path.
+The Import Wizard can also search common Windows user folders for Calibre
+`metadata.db` candidates, then apply the first found library through the
+suggested-path button before diagnosis.
 After `Refresh Books`, TTS Studio and Library can switch books with
 `Previous Book` / `Next Book` and reload the preview automatically.
 The Import Wizard uses the selected cleanup profile for both local and Calibre

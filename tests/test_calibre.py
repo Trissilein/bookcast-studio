@@ -8,6 +8,7 @@ from bookcast.calibre import (
     CalibreBook,
     _calibredb_candidate_paths,
     diagnose_calibre_library,
+    find_calibre_libraries,
     parse_calibre_list,
 )
 from bookcast.library import BookLibrary
@@ -151,6 +152,28 @@ def test_calibre_diagnose_explains_raw_ebook_folder(tmp_path: Path, monkeypatch)
     assert diagnostic["hints"] == [
         "Selected folder contains supported ebook files but no Calibre metadata.db. Use Import Source -> Folder for raw EPUB/PDF/DOCX/TXT/MD folders, or choose the real Calibre library root."
     ]
+
+
+def test_find_calibre_libraries_searches_roots_and_dedupes(tmp_path: Path) -> None:
+    parent = tmp_path / "Books"
+    library = parent / "Calibre Library"
+    library.mkdir(parents=True)
+    (library / "metadata.db").write_text("", encoding="utf-8")
+
+    candidates = find_calibre_libraries([parent, library], limit=8)
+
+    assert candidates == [str(library)]
+
+
+def test_find_calibre_libraries_uses_common_windows_env(tmp_path: Path) -> None:
+    userprofile = tmp_path / "User"
+    library = userprofile / "Documents" / "Calibre Library"
+    library.mkdir(parents=True)
+    (library / "metadata.db").write_text("", encoding="utf-8")
+
+    candidates = find_calibre_libraries(environ={"USERPROFILE": str(userprofile)})
+
+    assert candidates == [str(library)]
 
 
 class _FakeCalibreClient:
