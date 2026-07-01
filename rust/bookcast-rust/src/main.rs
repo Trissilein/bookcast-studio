@@ -4072,7 +4072,7 @@ fn calibre_action_text(
             .to_string();
     }
     if !candidate_suggestion.trim().is_empty() {
-        return "Calibre metadata found elsewhere. Next: Use suggested Calibre, then Diagnose Calibre again.".to_string();
+        return "Calibre metadata found elsewhere. Next: Use suggested Calibre (shown path or first candidate), then Diagnose Calibre again.".to_string();
     }
     if !source_suggestion.trim().is_empty() {
         return "This is not a Calibre library, but supported books were found. Next: Use as Source Folder, Probe Source, then Import Source.".to_string();
@@ -4673,7 +4673,9 @@ fn handle_bridge_events(
                         String::new()
                     };
                     let candidates = if !candidates.is_empty() {
-                        format!("\nCandidate libraries:\n{candidates}")
+                        format!(
+                            "\nCandidate libraries (Use suggested Calibre applies the first one):\n{candidates}"
+                        )
                     } else {
                         String::new()
                     };
@@ -5959,6 +5961,10 @@ mod tests {
         assert!(
             calibre_action_text(false, "D:\\Calibre", "", "metadata.db not found")
                 .contains("Use suggested Calibre")
+        );
+        assert!(
+            calibre_action_text(false, "D:\\Calibre", "", "metadata.db not found")
+                .contains("first candidate")
         );
         assert!(
             calibre_action_text(false, "", "D:\\Books", "metadata.db not found")
