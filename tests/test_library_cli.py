@@ -245,7 +245,12 @@ def test_render_book_guesses_dialogue_voice_from_said_tags(tmp_path: Path, monke
     library_root = tmp_path / "library"
     source = tmp_path / "Ada Author - Dialogue Book.txt"
     source.write_text(
-        '"Hello there," said Ada.\n\n"Hallo", sagte Bob.\n\nNarrator continues.',
+        '"Hello there," said Ada.\n\n'
+        '"Hallo", sagte Bob.\n\n'
+        '"Nicht jetzt", erwiderte Ada leise.\n\n'
+        'Bob fragte: "Warum nicht?"\n\n'
+        '"Stop!" Alice cried.\n\n'
+        "Narrator continues.",
         encoding="utf-8",
     )
 
@@ -276,14 +281,21 @@ def test_render_book_guesses_dialogue_voice_from_said_tags(tmp_path: Path, monke
             book_id,
             provider=provider,
             voice="Narrator Voice",
-            voice_map={"Ada": "Ada Voice", "Bob": "Bob Voice"},
+            voice_map={"Ada": "Ada Voice", "Bob": "Bob Voice", "Alice": "Alice Voice"},
             output_format="opus",
         )
     finally:
         library.close()
 
     assert output.exists()
-    assert [voice for _, voice in provider.calls] == ["Ada Voice", "Bob Voice", "Narrator Voice"]
+    assert [voice for _, voice in provider.calls] == [
+        "Ada Voice",
+        "Bob Voice",
+        "Ada Voice",
+        "Bob Voice",
+        "Alice Voice",
+        "Narrator Voice",
+    ]
 
 
 def test_render_book_m4b_passes_chapters(tmp_path: Path, monkeypatch) -> None:

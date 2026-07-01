@@ -12,7 +12,7 @@ Status legend:
 - Current state: Alpha / manual-test ready.
 - Interface state: not final.
 - Best current test path: run `scripts\start_manual_test.ps1`, then test one real EPUB, one Calibre import, and one short render.
-- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-06-30 with 63 Python tests, 31 Rust tests, release build, acceptance smoke, and UI launch smoke.
+- Latest readiness evidence: `scripts\readiness_check.ps1` passed on 2026-07-01 with 64 Python tests, 33 Rust tests, release build, acceptance smoke, and UI launch smoke.
 - Main risk: real `audio.cpp` model setup and long-book UX have not had enough hands-on validation.
 
 ## M0 Repo Bootstrap
@@ -103,6 +103,7 @@ Status: Partial.
 - Rust Characters view shows confidence and excerpt fields when the LLM returns them.
 - Prefix-based per-character audiobook casting exists for reviewed `Speaker:` chunks.
 - Basic dialogue-tag casting exists for reviewed voices when chunks contain patterns like `"..." said Ada` or `"..." sagte Ada`.
+- Dialogue-tag casting checks multiple quoted spans and supports more English/German tags such as `asked`, `cried`, `erwiderte`, `fragte`, and `entgegnete`.
 - Remaining: deeper automatic dialogue attribution and real-world tuning of confidence/excerpt quality.
 
 ## M5 Static Podcast Generator

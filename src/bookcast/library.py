@@ -747,21 +747,25 @@ def _voice_for_text(text: str, default_voice: str | None, voice_map: dict[str, s
 
 
 def _dialogue_attributed_to(text: str, speaker: str) -> bool:
-    quoted = re.search(r'["“„][^"“”„]{1,240}["”]', text)
-    if not quoted:
-        return False
     speaker_pattern = re.escape(speaker)
+    speaker_ref = rf"(?<!\w){speaker_pattern}(?!\w)"
     verbs = (
         "said|asked|replied|whispered|called|cried|answered|"
-        "sagte|fragte|antwortete|flüsterte|flusterte|rief|meinte"
+        "muttered|shouted|murmured|continued|"
+        "sagte|fragte|antwortete|flüsterte|flusterte|rief|meinte|"
+        "erwiderte|murmelte|schrie|sprach|entgegnete|bemerkte"
     )
-    after_quote = text[quoted.end() : quoted.end() + 120]
-    before_quote = text[max(0, quoted.start() - 80) : quoted.start()]
-    return bool(
-        re.search(rf"\b(?:{verbs})\s+{speaker_pattern}\b", after_quote, flags=re.IGNORECASE)
-        or re.search(rf"\b{speaker_pattern}\s+(?:{verbs})\b", after_quote, flags=re.IGNORECASE)
-        or re.search(rf"\b{speaker_pattern}\s+(?:{verbs})\b", before_quote, flags=re.IGNORECASE)
-    )
+    for quoted in re.finditer(r'["“„»«][^"“”„»«]{1,240}["”»«]', text):
+        after_quote = text[quoted.end() : quoted.end() + 120]
+        before_quote = text[max(0, quoted.start() - 100) : quoted.start()]
+        if (
+            re.search(rf"\b(?:{verbs})\s+{speaker_ref}", after_quote, flags=re.IGNORECASE)
+            or re.search(rf"{speaker_ref}\s*(?:,|:)?\s*\b(?:{verbs})\b", after_quote, flags=re.IGNORECASE)
+            or re.search(rf"{speaker_ref}\s*(?:,|:)?\s*\b(?:{verbs})\b", before_quote, flags=re.IGNORECASE)
+            or re.search(rf"\b(?:{verbs})\s+{speaker_ref}", before_quote, flags=re.IGNORECASE)
+        ):
+            return True
+    return False
 
 
 def safe_name(value: str) -> str:
